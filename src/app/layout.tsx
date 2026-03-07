@@ -26,7 +26,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'OrgFlow — Organizational Activity & Scheduling Platform',
+  title: 'MeetUp — Organizational Activity & Scheduling Platform',
   description:
     'Meetings, tasks, and training programs in one place — with automated reminders on West Africa Time. Never miss a deadline again.',
 }
