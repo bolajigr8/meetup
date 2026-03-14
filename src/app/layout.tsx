@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import { Plus_Jakarta_Sans, Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+import Providers from './providers'
 import Navbar from '@/components/General/navbar'
 import Footer from '@/components/General/footer'
+import { Toaster } from '@/components/ui/sonner'
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -26,9 +28,9 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'MeetUp — Organizational Activity & Scheduling Platform',
+  title: 'MeetUp — Schedule smarter',
   description:
-    'Meetings, tasks, and training programs in one place — with automated reminders on West Africa Time. Never miss a deadline again.',
+    'Meetings, tasks, and training programs in one place — with automated reminders on West Africa Time.',
 }
 
 export default function RootLayout({
@@ -42,9 +44,10 @@ export default function RootLayout({
       className={`${plusJakartaSans.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <body>
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
+        <Providers>
+          <main>{children}</main>
+          <Toaster position='bottom-right' />
+        </Providers>
       </body>
     </html>
   )
