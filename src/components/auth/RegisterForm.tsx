@@ -30,7 +30,9 @@ export default function RegisterForm() {
       if (!res.ok) {
         // Handle specific error codes
         if (data.error?.code === 'EMAIL_EXISTS_OAUTH') {
-          setError('This email is registered with Google. Please sign in with Google instead.')
+          setError(
+            'This email is registered with Google. Please sign in with Google instead.',
+          )
         } else {
           setError(data.error?.message ?? 'Something went wrong')
         }
@@ -54,47 +56,47 @@ export default function RegisterForm() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <GoogleButton label="Sign up with Google" />
+    <div className='flex flex-col gap-4'>
+      {/* <GoogleButton label="Sign up with Google" /> */}
 
       <Divider />
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
         {error && <ErrorBanner message={error} />}
 
         <Field
-          label="Full name"
-          type="text"
+          label='Full name'
+          type='text'
           value={form.name}
           onChange={(v) => setForm((f) => ({ ...f, name: v }))}
-          placeholder="Adebayo Okafor"
-          autoComplete="name"
+          placeholder='Adebayo Okafor'
+          autoComplete='name'
         />
         <Field
-          label="Email address"
-          type="email"
+          label='Email address'
+          type='email'
           value={form.email}
           onChange={(v) => setForm((f) => ({ ...f, email: v }))}
-          placeholder="you@example.com"
-          autoComplete="email"
+          placeholder='you@example.com'
+          autoComplete='email'
         />
         <Field
-          label="Password"
-          type="password"
+          label='Password'
+          type='password'
           value={form.password}
           onChange={(v) => setForm((f) => ({ ...f, password: v }))}
-          placeholder="At least 8 characters"
-          autoComplete="new-password"
+          placeholder='At least 8 characters'
+          autoComplete='new-password'
         />
 
-        <SubmitButton loading={loading} label="Create account" />
+        <SubmitButton loading={loading} label='Create account' />
       </form>
 
-      <p className="text-center text-sm" style={{ color: 'var(--of-muted)' }}>
+      <p className='text-center text-sm' style={{ color: 'var(--of-muted)' }}>
         Already have an account?{' '}
         <Link
-          href="/login"
-          className="font-medium no-underline hover:underline"
+          href='/login'
+          className='font-medium no-underline hover:underline'
           style={{ color: 'var(--of-blue)' }}
         >
           Sign in
