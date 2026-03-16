@@ -133,9 +133,13 @@ export default function ProgramForm({
       }
 
       toast.success(initialData ? 'Program updated' : 'Program created', {
-        description: initialData
-          ? `"${form.title}" has been saved with your changes.`
-          : `"${form.title}" has been created successfully.`,
+        description: (
+          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
+            {initialData
+              ? `"${form.title}" has been saved with your changes.`
+              : `"${form.title}" has been created successfully.`}
+          </span>
+        ),
       })
       onSuccess(form)
     } catch (err) {

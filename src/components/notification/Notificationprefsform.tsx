@@ -104,7 +104,11 @@ export default function NotificationPrefsForm() {
       if (!res.ok)
         throw new Error(data.error?.message ?? 'Failed to save preferences')
       toast.success('Preferences saved', {
-        description: 'Your notification settings have been updated.',
+        description: (
+          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
+            Your notification settings have been updated.
+          </span>
+        ),
       })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong')

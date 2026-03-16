@@ -87,7 +87,11 @@ export default function PasswordForm() {
         throw new Error(data.error?.message ?? 'Failed to update password')
       }
       toast.success('Password updated', {
-        description: 'Your new password is active.',
+        description: (
+          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
+            Your new password is active.
+          </span>
+        ),
       })
       setForm(INITIAL)
     } catch (err) {

@@ -107,9 +107,13 @@ export default function TaskForm({
       }
 
       toast.success(initialData ? 'Task updated' : 'Task created', {
-        description: initialData
-          ? `"${form.title}" has been saved with your changes.`
-          : `"${form.title}" has been added to your tasks.`,
+        description: (
+          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
+            {initialData
+              ? `"${form.title}" has been saved with your changes.`
+              : `"${form.title}" has been added to your tasks.`}
+          </span>
+        ),
       })
       onSuccess(form)
     } catch (err) {

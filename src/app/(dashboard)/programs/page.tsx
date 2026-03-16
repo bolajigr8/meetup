@@ -87,7 +87,11 @@ export default function ProgramsPage() {
         throw new Error(json.error?.message ?? 'Failed to cancel program')
       }
       toast.success('Program cancelled', {
-        description: 'The program has been marked as cancelled.',
+        description: (
+          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
+            The program has been marked as cancelled.{' '}
+          </span>
+        ),
       })
     } catch (err) {
       fetchPrograms()

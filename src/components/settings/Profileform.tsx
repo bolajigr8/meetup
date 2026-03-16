@@ -78,7 +78,11 @@ export default function ProfileForm() {
         throw new Error(data.error?.message ?? 'Failed to update profile')
       }
       toast.success('Profile updated', {
-        description: 'Your changes have been saved.',
+        description: (
+          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
+            Your changes have been saved.
+          </span>
+        ),
       })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong')
