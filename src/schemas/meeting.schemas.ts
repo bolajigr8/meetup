@@ -1,13 +1,10 @@
+// src/schemas/meeting.schemas.ts
 import { z } from 'zod'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number)
   return h * 60 + m
 }
-
-// ─── Create ───────────────────────────────────────────────────────────────────
 
 export const createMeetingSchema = z
   .object({
@@ -16,35 +13,29 @@ export const createMeetingSchema = z
       .min(3, 'Title must be at least 3 characters')
       .max(100, 'Title must be under 100 characters')
       .trim(),
-
     description: z
       .string()
       .max(500, 'Description must be under 500 characters')
       .trim()
       .optional(),
-
     date: z
       .string({ message: 'Date is required' })
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
-
     startTime: z
       .string({ message: 'Start time is required' })
       .regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:mm format'),
-
     endTime: z
       .string({ message: 'End time is required' })
       .regex(/^\d{2}:\d{2}$/, 'End time must be in HH:mm format'),
-
     location: z
       .string()
       .max(200, 'Location must be under 200 characters')
       .trim()
       .optional(),
-
     participants: z
       .array(z.string().email('Each participant must be a valid email'))
       .default([]),
-
+    assignedTo: z.array(z.string().min(1)).default([]),
     priority: z.enum(['low', 'medium', 'high']).default('medium'),
   })
   .refine((d) => toMinutes(d.endTime) > toMinutes(d.startTime), {
@@ -54,52 +45,26 @@ export const createMeetingSchema = z
 
 export type CreateMeetingInput = z.infer<typeof createMeetingSchema>
 
-// ─── Update (all fields optional) ────────────────────────────────────────────
-
 export const updateMeetingSchema = z
   .object({
-    title: z
-      .string()
-      .min(3, 'Title must be at least 3 characters')
-      .max(100, 'Title must be under 100 characters')
-      .trim()
-      .optional(),
-
-    description: z
-      .string()
-      .max(500, 'Description must be under 500 characters')
-      .trim()
-      .nullable()
-      .optional(),
-
+    title: z.string().min(3).max(100).trim().optional(),
+    description: z.string().max(500).trim().nullable().optional(),
     date: z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
-
     startTime: z
       .string()
-      .regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:mm format')
+      .regex(/^\d{2}:\d{2}$/)
       .optional(),
-
     endTime: z
       .string()
-      .regex(/^\d{2}:\d{2}$/, 'End time must be in HH:mm format')
+      .regex(/^\d{2}:\d{2}$/)
       .optional(),
-
-    location: z
-      .string()
-      .max(200, 'Location must be under 200 characters')
-      .trim()
-      .nullable()
-      .optional(),
-
-    participants: z
-      .array(z.string().email('Each participant must be a valid email'))
-      .optional(),
-
+    location: z.string().max(200).trim().nullable().optional(),
+    participants: z.array(z.string().email()).optional(),
+    assignedTo: z.array(z.string().min(1)).optional(),
     priority: z.enum(['low', 'medium', 'high']).optional(),
-
     status: z
       .enum(['upcoming', 'ongoing', 'completed', 'cancelled'])
       .optional(),
@@ -113,8 +78,6 @@ export const updateMeetingSchema = z
   )
 
 export type UpdateMeetingInput = z.infer<typeof updateMeetingSchema>
-
-// ─── List query params ────────────────────────────────────────────────────────
 
 export const listMeetingsQuerySchema = z.object({
   status: z

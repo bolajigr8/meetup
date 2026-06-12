@@ -1,3 +1,4 @@
+// src/models/User.ts
 import mongoose, { Schema, Document } from 'mongoose'
 
 export interface IProvider {
@@ -14,6 +15,7 @@ export interface IUser extends Document {
   providers: IProvider[]
   timezone: string
   isSuperAdmin: boolean
+  isAdmin: boolean
   passwordChangedAt?: Date | null
   createdAt: Date
   updatedAt: Date
@@ -65,6 +67,10 @@ const UserSchema = new Schema<IUser>(
       type: Boolean,
       default: false,
     },
+    isAdmin: {
+      type: Boolean,
+      default: false,
+    },
     passwordChangedAt: {
       type: Date,
       default: null,
@@ -75,7 +81,6 @@ const UserSchema = new Schema<IUser>(
   },
 )
 
-// Index for fast email lookups (unique already creates one, but explicit is clearer)
 UserSchema.index({ email: 1 })
 
 export default mongoose.models.User || mongoose.model<IUser>('User', UserSchema)

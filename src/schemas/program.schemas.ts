@@ -1,3 +1,4 @@
+// src/schemas/program.schemas.ts
 import { z } from 'zod'
 
 export const createProgramSchema = z
@@ -7,26 +8,22 @@ export const createProgramSchema = z
       .min(3, 'Title must be at least 3 characters')
       .max(100, 'Title must be under 100 characters')
       .trim(),
-
     description: z
       .string()
       .max(500, 'Description must be under 500 characters')
       .trim()
       .optional(),
-
     startDate: z
       .string({ message: 'Start date is required' })
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format'),
-
     endDate: z
       .string({ message: 'End date is required' })
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format'),
-
     scheduleType: z.enum(['standard', 'intensive']).default('standard'),
-
     participants: z
       .array(z.string().email('Each participant must be a valid email'))
       .default([]),
+    assignedTo: z.array(z.string().min(1)).default([]),
   })
   .refine((d) => d.endDate >= d.startDate, {
     message: 'End date must be on or after start date',
@@ -49,6 +46,7 @@ export const updateProgramSchema = z
       .optional(),
     scheduleType: z.enum(['standard', 'intensive']).optional(),
     participants: z.array(z.string().email()).optional(),
+    assignedTo: z.array(z.string().min(1)).optional(),
     status: z.enum(['upcoming', 'active', 'completed', 'cancelled']).optional(),
   })
   .refine(

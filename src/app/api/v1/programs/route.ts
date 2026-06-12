@@ -1,4 +1,6 @@
+// src/app/api/v1/programs/route.ts
 import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
 import { ApiError, withErrorHandler } from '@/lib/api-error'
 import {
@@ -6,7 +8,7 @@ import {
   listProgramsQuerySchema,
 } from '@/schemas/program.schemas'
 import Program from '@/models/Program'
-import { auth } from '@/lib/auth'
+import { Types } from 'mongoose'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function serialize(doc: Record<string, any>) {
@@ -26,7 +28,7 @@ export const GET = withErrorHandler(async (req) => {
     limit: url.searchParams.get('limit') ?? 20,
   })
 
-  if (!queryParsed.success) {
+  if (!queryParsed.success)
     throw new ApiError(
       400,
       'VALIDATION_ERROR',
@@ -36,13 +38,17 @@ export const GET = withErrorHandler(async (req) => {
         message: e.message,
       })),
     )
-  }
 
   const { status, page, limit } = queryParsed.data
-
   await connectToDatabase()
 
-  const filter: Record<string, unknown> = { createdBy: session.user.id }
+  const uid = new Types.ObjectId(session.user.id)
+  const isAdmin = session.user.isAdmin || session.user.isSuperAdmin
+
+  const filter: Record<string, unknown> = isAdmin
+    ? { createdBy: uid }
+    : { assignedTo: uid }
+
   if (status !== 'all') filter.status = status
 
   const [programs, total] = await Promise.all([
@@ -50,6 +56,7 @@ export const GET = withErrorHandler(async (req) => {
       .sort({ startDate: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
+      .populate('assignedTo', 'name email image')
       .lean(),
     Program.countDocuments(filter),
   ])
@@ -65,11 +72,12 @@ export const POST = withErrorHandler(async (req) => {
   const session = await auth()
   if (!session?.user?.id)
     throw new ApiError(401, 'UNAUTHORIZED', 'You must be signed in')
+  if (!session.user.isAdmin && !session.user.isSuperAdmin)
+    throw new ApiError(403, 'FORBIDDEN', 'Only admins can create programs')
 
   const body = await req.json()
   const parsed = createProgramSchema.safeParse(body)
-
-  if (!parsed.success) {
+  if (!parsed.success)
     throw new ApiError(
       400,
       'VALIDATION_ERROR',
@@ -79,12 +87,12 @@ export const POST = withErrorHandler(async (req) => {
         message: e.message,
       })),
     )
-  }
 
   await connectToDatabase()
 
   const program = await Program.create({
     ...parsed.data,
+    assignedTo: parsed.data.assignedTo.map((id) => new Types.ObjectId(id)),
     createdBy: session.user.id,
     status: 'upcoming',
   })

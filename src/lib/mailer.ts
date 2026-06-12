@@ -1,15 +1,14 @@
-import sgMail from '@sendgrid/mail'
+import { Resend } from 'resend'
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY!)
+const resend = new Resend(
+  process.env.RESEND_API_KEY ?? 're_dummy_key_replace_me',
+)
 
-const FROM = {
-  email: process.env.SENDGRID_FROM_EMAIL!,
-  name: 'MeetUp',
-}
-
+const FROM_EMAIL =
+  process.env.RESEND_FROM_EMAIL ?? 'MeetUp <noreply@yourdomain.com>'
 const BASE_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
 
-// ─── Shared template wrapper ─────────────────────────────────────────────────
+// ─── Shared template wrapper ──────────────────────────────────────────────────
 
 function htmlWrapper(content: string): string {
   return `
@@ -26,8 +25,6 @@ function htmlWrapper(content: string): string {
       <td align="center">
         <table width="520" cellpadding="0" cellspacing="0"
           style="background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
-
-          <!-- Header -->
           <tr>
             <td style="background:#2563eb;padding:24px 32px;">
               <span style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
@@ -35,24 +32,19 @@ function htmlWrapper(content: string): string {
               </span>
             </td>
           </tr>
-
-          <!-- Body -->
           <tr>
             <td style="padding:32px;">
               ${content}
             </td>
           </tr>
-
-          <!-- Footer -->
           <tr>
             <td style="padding:20px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
               <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">
                 © ${new Date().getFullYear()} MeetUp · All times in West Africa Time (WAT, UTC+1)
-                <br />If you didn't request this email, you can safely ignore it.
+                <br />If you didn't expect this email, you can safely ignore it.
               </p>
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
@@ -89,10 +81,9 @@ export async function sendPasswordResetEmail(
   rawToken: string,
 ): Promise<void> {
   const resetUrl = `${BASE_URL}/reset-password?token=${rawToken}`
-
-  await sgMail.send({
+  await resend.emails.send({
+    from: FROM_EMAIL,
     to: email,
-    from: FROM,
     subject: 'Reset your MeetUp password',
     html: htmlWrapper(`
       <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
@@ -104,7 +95,7 @@ export async function sendPasswordResetEmail(
       </p>
       ${ctaButton('Reset Password', resetUrl)}
       <p style="margin:16px 0 0;font-size:13px;color:#64748b;">
-        Or copy this link into your browser:<br />
+        Or copy this link:<br />
         <span style="color:#2563eb;word-break:break-all;">${resetUrl}</span>
       </p>
     `),
@@ -118,18 +109,17 @@ export async function sendWelcomeEmail(
   name: string,
 ): Promise<void> {
   const dashboardUrl = `${BASE_URL}/overview`
-
-  await sgMail.send({
+  await resend.emails.send({
+    from: FROM_EMAIL,
     to: email,
-    from: FROM,
     subject: 'Welcome to MeetUp 🎉',
     html: htmlWrapper(`
       <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
         Welcome to MeetUp, ${name}!
       </h2>
       <p style="margin:0 0 16px;font-size:15px;color:#334155;line-height:1.6;">
-        Your account is ready. MeetUp helps you schedule meetings, track tasks,
-        and manage training programs — all running on West Africa Time.
+        Your account is ready. MeetUp helps you stay on top of meetings, tasks,
+        and training programs — all running on West Africa Time.
       </p>
       ${ctaButton('Go to Dashboard', dashboardUrl)}
       <p style="margin:16px 0 0;font-size:13px;color:#64748b;line-height:1.6;">
@@ -144,9 +134,9 @@ export async function sendWelcomeEmail(
 
 type MeetingReminderPayload = {
   title: string
-  date: string // YYYY-MM-DD
-  startTime: string // HH:mm WAT
-  endTime: string // HH:mm WAT
+  date: string
+  startTime: string
+  endTime: string
   location?: string
   description?: string
 }
@@ -158,9 +148,9 @@ const REMINDER_LABEL: Record<'1day' | '2hr' | '30min', string> = {
 }
 
 const REMINDER_BADGE_COLOR: Record<'1day' | '2hr' | '30min', string> = {
-  '1day': '#0369a1', // blue
-  '2hr': '#b45309', // amber
-  '30min': '#b91c1c', // red
+  '1day': '#0369a1',
+  '2hr': '#b45309',
+  '30min': '#b91c1c',
 }
 
 export async function sendMeetingReminderEmail(
@@ -172,28 +162,23 @@ export async function sendMeetingReminderEmail(
   const label = REMINDER_LABEL[reminderType]
   const badgeColor = REMINDER_BADGE_COLOR[reminderType]
   const meetingsUrl = `${BASE_URL}/meetings`
-
-  await sgMail.send({
+  await resend.emails.send({
+    from: FROM_EMAIL,
     to: email,
-    from: FROM,
     subject: `Reminder: "${meeting.title}" is ${label}`,
     html: htmlWrapper(`
       <div style="margin-bottom:20px;">
         <span style="display:inline-block;background:${badgeColor};color:#fff;
-                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;
-                     letter-spacing:0.3px;">
+                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;">
           ${label.toUpperCase()}
         </span>
       </div>
-
       <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
         Meeting Reminder
       </h2>
       <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
         Hi ${name}, your meeting is coming up <strong>${label}</strong>.
       </p>
-
-      <!-- Meeting detail card -->
       <table width="100%" cellpadding="0" cellspacing="0"
         style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
         <tbody>
@@ -204,7 +189,6 @@ export async function sendMeetingReminderEmail(
           ${meeting.description ? infoPill('Notes', meeting.description) : ''}
         </tbody>
       </table>
-
       ${ctaButton('View Meeting', meetingsUrl)}
     `),
   })
@@ -214,7 +198,7 @@ export async function sendMeetingReminderEmail(
 
 type TaskReminderPayload = {
   title: string
-  dueDate: string // YYYY-MM-DD
+  dueDate: string
   priority: string
   description?: string
 }
@@ -225,27 +209,23 @@ export async function sendTaskReminderEmail(
   task: TaskReminderPayload,
 ): Promise<void> {
   const tasksUrl = `${BASE_URL}/tasks`
-
-  await sgMail.send({
+  await resend.emails.send({
+    from: FROM_EMAIL,
     to: email,
-    from: FROM,
     subject: `Task due tomorrow: "${task.title}"`,
     html: htmlWrapper(`
       <div style="margin-bottom:20px;">
         <span style="display:inline-block;background:#0369a1;color:#fff;
-                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;
-                     letter-spacing:0.3px;">
+                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;">
           DUE TOMORROW
         </span>
       </div>
-
       <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
         Task Due Tomorrow
       </h2>
       <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
         Hi ${name}, this task is due tomorrow — make sure it's completed on time.
       </p>
-
       <table width="100%" cellpadding="0" cellspacing="0"
         style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
         <tbody>
@@ -255,7 +235,6 @@ export async function sendTaskReminderEmail(
           ${task.description ? infoPill('Notes', task.description) : ''}
         </tbody>
       </table>
-
       ${ctaButton('View Tasks', tasksUrl)}
     `),
   })
@@ -265,8 +244,8 @@ export async function sendTaskReminderEmail(
 
 type ProgramReminderPayload = {
   title: string
-  startDate: string // YYYY-MM-DD
-  endDate: string // YYYY-MM-DD
+  startDate: string
+  endDate: string
   scheduleType: string
   description?: string
 }
@@ -277,27 +256,23 @@ export async function sendProgramReminderEmail(
   program: ProgramReminderPayload,
 ): Promise<void> {
   const programsUrl = `${BASE_URL}/programs`
-
-  await sgMail.send({
+  await resend.emails.send({
+    from: FROM_EMAIL,
     to: email,
-    from: FROM,
     subject: `Program starting tomorrow: "${program.title}"`,
     html: htmlWrapper(`
       <div style="margin-bottom:20px;">
         <span style="display:inline-block;background:#0369a1;color:#fff;
-                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;
-                     letter-spacing:0.3px;">
+                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;">
           STARTS TOMORROW
         </span>
       </div>
-
       <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
         Program Starting Tomorrow
       </h2>
       <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
         Hi ${name}, your program begins tomorrow. Make sure participants are ready.
       </p>
-
       <table width="100%" cellpadding="0" cellspacing="0"
         style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
         <tbody>
@@ -308,7 +283,6 @@ export async function sendProgramReminderEmail(
           ${program.description ? infoPill('Notes', program.description) : ''}
         </tbody>
       </table>
-
       ${ctaButton('View Programs', programsUrl)}
     `),
   })

@@ -1,4 +1,8 @@
+// src/components/meetings/MeetingCard.tsx
+'use client'
+
 import { MapPin, Users, Clock, MoreHorizontal } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +20,7 @@ export interface Meeting {
   endTime: string
   location?: string
   participants: string[]
+  assignedTo?: { id: string; name: string; email: string }[]
   priority: 'low' | 'medium' | 'high'
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
 }
@@ -50,6 +55,9 @@ export default function MeetingCard({
   onEdit,
   onDelete,
 }: MeetingCardProps) {
+  const { data: session } = useSession()
+  const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+
   const pStyle = priorityStyles[meeting.priority]
   const sStyle = statusStyles[meeting.status]
 
@@ -58,18 +66,17 @@ export default function MeetingCard({
       className='bg-white rounded-xl border p-5 hover:shadow-sm transition-all duration-200 group'
       style={{ borderColor: 'var(--of-border)' }}
     >
-      {/* Header row */}
       <div className='flex items-start justify-between gap-3 mb-3'>
         <div className='flex-1 min-w-0'>
           <h3
-            className='font-jakarta text-sm font-semibold leading-snug wrap-break-word'
+            className='font-jakarta text-sm font-semibold leading-snug'
             style={{ color: 'var(--of-heading)' }}
           >
             {meeting.title}
           </h3>
           {meeting.description && (
             <p
-              className='text-xs mt-1 wrap-break-word overflow-wrap-anywhere leading-relaxed'
+              className='text-xs mt-1 leading-relaxed'
               style={{ color: 'var(--of-muted)', wordBreak: 'break-word' }}
             >
               {meeting.description}
@@ -77,31 +84,32 @@ export default function MeetingCard({
           )}
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant='ghost'
-              size='icon'
-              className='h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0'
-            >
-              <MoreHorizontal size={14} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align='end' className='w-36'>
-            <DropdownMenuItem onClick={() => onEdit?.(meeting.id)}>
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onDelete?.(meeting.id)}
-              className='text-red-600 focus:text-red-600 focus:bg-red-50'
-            >
-              Cancel
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {isAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='ghost'
+                size='icon'
+                className='h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0'
+              >
+                <MoreHorizontal size={14} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-36'>
+              <DropdownMenuItem onClick={() => onEdit?.(meeting.id)}>
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onDelete?.(meeting.id)}
+                className='text-red-600 focus:text-red-600 focus:bg-red-50'
+              >
+                Cancel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
-      {/* Badges */}
       <div className='flex flex-wrap gap-1.5 mb-3'>
         <span
           className='inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full'
@@ -121,7 +129,6 @@ export default function MeetingCard({
         </span>
       </div>
 
-      {/* Meta */}
       <div className='flex flex-col gap-1.5'>
         <div className='flex items-center gap-1.5'>
           <Clock
@@ -141,10 +148,7 @@ export default function MeetingCard({
               size={12}
               style={{ color: 'var(--of-muted)', flexShrink: 0 }}
             />
-            <span
-              className='text-xs wrap-break-word min-w-0'
-              style={{ color: 'var(--of-body)' }}
-            >
+            <span className='text-xs' style={{ color: 'var(--of-body)' }}>
               {meeting.location}
             </span>
           </div>

@@ -1,13 +1,15 @@
+// src/models/Task.ts
 import mongoose, { Schema, Document, Types } from 'mongoose'
 
 export interface ITask extends Document {
   title: string
   description?: string
-  dueDate: string // YYYY-MM-DD
+  dueDate: string
   priority: 'low' | 'medium' | 'high'
   status: 'todo' | 'in_progress' | 'completed' | 'overdue'
   category?: string
-  assignedTo?: string
+  assignedTo: Types.ObjectId[]
+  assignedToEmail?: string
   createdBy: Types.ObjectId
   createdAt: Date
   updatedAt: Date
@@ -39,9 +41,26 @@ const TaskSchema = new Schema<ITask>(
       enum: ['todo', 'in_progress', 'completed', 'overdue'],
       default: 'todo',
     },
-    category: { type: String, trim: true, maxlength: 50, default: undefined },
-    assignedTo: { type: String, trim: true, default: undefined },
-    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    category: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+      default: undefined,
+    },
+    assignedTo: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
+    assignedToEmail: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
   },
   { timestamps: true },
 )
@@ -49,5 +68,6 @@ const TaskSchema = new Schema<ITask>(
 TaskSchema.index({ createdBy: 1, status: 1 })
 TaskSchema.index({ createdBy: 1, dueDate: 1 })
 TaskSchema.index({ createdBy: 1, priority: 1 })
+TaskSchema.index({ assignedTo: 1 })
 
 export default mongoose.models.Task || mongoose.model<ITask>('Task', TaskSchema)

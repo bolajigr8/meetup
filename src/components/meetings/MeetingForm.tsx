@@ -1,7 +1,9 @@
+// src/components/meetings/MeetingForm.tsx
 'use client'
 
 import { useState, KeyboardEvent, useRef } from 'react'
 import { X, UserPlus, Loader2 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,9 +25,9 @@ import {
   hasErrors,
 } from '@/validations/meeting'
 import type { Meeting } from '@/components/meetings/MeetingCard'
+import UserSelect from '@/components/shared/UserSelect'
 
 interface MeetingFormProps {
-  /** Pre-fill form for edit mode */
   initialData?: Meeting
   onSuccess: (data: MeetingFormData) => void
   onCancel: () => void
@@ -36,6 +38,9 @@ export default function MeetingForm({
   onSuccess,
   onCancel,
 }: MeetingFormProps) {
+  const { data: session } = useSession()
+  const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+
   const [form, setForm] = useState<MeetingFormData>(() =>
     initialData
       ? {
@@ -47,8 +52,13 @@ export default function MeetingForm({
           location: initialData.location ?? '',
           participants: [...initialData.participants],
           priority: initialData.priority,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          assignedTo:
+            (initialData as any).assignedTo?.map((u: any) =>
+              typeof u === 'string' ? u : (u.id ?? u._id?.toString() ?? ''),
+            ) ?? [],
         }
-      : MEETING_FORM_INITIAL,
+      : { ...MEETING_FORM_INITIAL, assignedTo: [] },
   )
 
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -62,7 +72,6 @@ export default function MeetingForm({
     value: MeetingFormData[K],
   ) => {
     setForm((f) => ({ ...f, [field]: value }))
-    // Clear field error on change
     if (errors[field]) {
       setErrors((e) => {
         const next = { ...e }
@@ -72,7 +81,6 @@ export default function MeetingForm({
     }
   }
 
-  // ── Participant helpers ──────────────────────────────────────────────────────
   const addParticipant = () => {
     const email = participantInput.trim().toLowerCase()
     if (!email) return
@@ -100,7 +108,6 @@ export default function MeetingForm({
     }
   }
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const validationErrors = validateMeetingForm(form)
@@ -109,53 +116,42 @@ export default function MeetingForm({
       toast.error('Please fix the errors before submitting')
       return
     }
-
     setLoading(true)
     try {
       const url = initialData
         ? `/api/v1/meetings/${initialData.id}`
         : '/api/v1/meetings'
-
       const res = await fetch(url, {
         method: initialData ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-
       const data = await res.json()
-
       if (!res.ok) {
-        // Surface server-side field errors if present
         if (data.errors?.length) {
           const serverErrors: FieldErrors = {}
           for (const err of data.errors) {
-            if (err.field && !serverErrors[err.field as keyof FieldErrors]) {
+            if (err.field && !serverErrors[err.field as keyof FieldErrors])
               serverErrors[err.field as keyof FieldErrors] = err.message
-            }
           }
           setErrors(serverErrors)
         }
-        throw new Error(data.message ?? 'Something went wrong')
+        throw new Error(
+          data.error?.message ?? data.message ?? 'Something went wrong',
+        )
       }
-
       toast.success(initialData ? 'Meeting updated' : 'Meeting scheduled', {
         description: (
           <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
             {initialData
-              ? `"${form.title}" has been saved with your changes.`
+              ? `"${form.title}" has been saved.`
               : `"${form.title}" scheduled for ${form.date} at ${form.startTime} WAT.`}
           </span>
         ),
       })
       onSuccess(form)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Something went wrong', {
-        description: (
-          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
-            Please try again or contact support if the issue persists.
-          </span>
-        ),
-      })
+      toast.error(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
       setLoading(false)
     }
@@ -165,41 +161,35 @@ export default function MeetingForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className='flex flex-col gap-4'>
-      {/* Title */}
       <FormField label='Meeting title' required error={errors.title}>
         <Input
           value={form.title}
           onChange={(e) => set('title', e.target.value)}
           placeholder='e.g. Q3 Planning Session'
-          aria-invalid={!!errors.title}
-          className={
-            errors.title ? 'border-red-400 focus-visible:ring-red-300' : ''
-          }
+          readOnly={!isAdmin}
+          className={errors.title ? 'border-red-400' : ''}
         />
       </FormField>
 
-      {/* Description */}
       <FormField label='Description' error={errors.description}>
         <Textarea
           value={form.description}
           onChange={(e) => set('description', e.target.value)}
           placeholder='What is this meeting about?'
           rows={2}
-          className={`resize-none ${errors.description ? 'border-red-400 focus-visible:ring-red-300' : ''}`}
+          readOnly={!isAdmin}
+          className={`resize-none ${errors.description ? 'border-red-400' : ''}`}
         />
       </FormField>
 
-      {/* Date + times */}
       <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
         <FormField label='Date' required error={errors.date}>
           <Input
             type='date'
             value={form.date}
             onChange={(e) => set('date', e.target.value)}
-            aria-invalid={!!errors.date}
-            className={
-              errors.date ? 'border-red-400 focus-visible:ring-red-300' : ''
-            }
+            readOnly={!isAdmin}
+            className={errors.date ? 'border-red-400' : ''}
           />
         </FormField>
         <FormField label='Start (WAT)' required error={errors.startTime}>
@@ -207,12 +197,8 @@ export default function MeetingForm({
             type='time'
             value={form.startTime}
             onChange={(e) => set('startTime', e.target.value)}
-            aria-invalid={!!errors.startTime}
-            className={
-              errors.startTime
-                ? 'border-red-400 focus-visible:ring-red-300'
-                : ''
-            }
+            readOnly={!isAdmin}
+            className={errors.startTime ? 'border-red-400' : ''}
           />
         </FormField>
         <FormField label='End (WAT)' required error={errors.endTime}>
@@ -220,85 +206,88 @@ export default function MeetingForm({
             type='time'
             value={form.endTime}
             onChange={(e) => set('endTime', e.target.value)}
-            aria-invalid={!!errors.endTime}
-            className={
-              errors.endTime ? 'border-red-400 focus-visible:ring-red-300' : ''
-            }
+            readOnly={!isAdmin}
+            className={errors.endTime ? 'border-red-400' : ''}
           />
         </FormField>
       </div>
 
-      {/* Location + Priority */}
       <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
         <FormField label='Location' error={errors.location}>
           <Input
             value={form.location}
             onChange={(e) => set('location', e.target.value)}
             placeholder='Room, Zoom link, or address'
-            className={
-              errors.location ? 'border-red-400 focus-visible:ring-red-300' : ''
-            }
+            readOnly={!isAdmin}
+            className={errors.location ? 'border-red-400' : ''}
           />
         </FormField>
         <FormField label='Priority'>
-          <Select
-            value={form.priority}
-            onValueChange={(v) =>
-              set('priority', v as MeetingFormData['priority'])
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='low'>🟢 Low</SelectItem>
-              <SelectItem value='medium'>🟡 Medium</SelectItem>
-              <SelectItem value='high'>🔴 High</SelectItem>
-            </SelectContent>
-          </Select>
+          {isAdmin ? (
+            <Select
+              value={form.priority}
+              onValueChange={(v) =>
+                set('priority', v as MeetingFormData['priority'])
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='low'>🟢 Low</SelectItem>
+                <SelectItem value='medium'>🟡 Medium</SelectItem>
+                <SelectItem value='high'>🔴 High</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input value={form.priority} readOnly className='capitalize' />
+          )}
         </FormField>
       </div>
 
-      {/* Participants */}
+      {/* Assign to registered users — admin only */}
+      {isAdmin && (
+        <div className='relative'>
+          <UserSelect
+            value={(form as any).assignedTo ?? []}
+            onChange={(ids) => set('assignedTo' as any, ids)}
+            label='Assign to users (dashboard visibility)'
+          />
+        </div>
+      )}
+
+      {/* External participants — always visible, editable by admin */}
       <FormField
-        label='Participant email'
-        hint='Press Enter to add'
+        label='External participants'
+        hint={isAdmin ? 'Press Enter to add' : undefined}
         error={errors.participants as string}
       >
-        <div className='flex gap-2'>
-          <Input
-            ref={participantRef}
-            type='email'
-            value={participantInput}
-            onChange={(e) => {
-              setParticipantInput(e.target.value)
-              setParticipantError('')
-            }}
-            onKeyDown={handleParticipantKey}
-            placeholder='colleague@company.com'
-            className={
-              participantError
-                ? 'border-red-400 focus-visible:ring-red-300'
-                : ''
-            }
-            autoComplete='off'
-          />
-          <Button
-            type='button'
-            variant='outline'
-            onClick={addParticipant}
-            className='shrink-0 gap-1.5 text-sm px-3'
-            style={{
-              borderColor: 'var(--of-border)',
-              color: 'var(--of-heading)',
-            }}
-          >
-            <UserPlus size={14} />
-            Add
-          </Button>
-        </div>
-
-        {/* Inline error */}
+        {isAdmin && (
+          <div className='flex gap-2'>
+            <Input
+              ref={participantRef}
+              type='email'
+              value={participantInput}
+              onChange={(e) => {
+                setParticipantInput(e.target.value)
+                setParticipantError('')
+              }}
+              onKeyDown={handleParticipantKey}
+              placeholder='colleague@company.com'
+              className={participantError ? 'border-red-400' : ''}
+              autoComplete='off'
+            />
+            <Button
+              type='button'
+              variant='outline'
+              onClick={addParticipant}
+              className='shrink-0 gap-1.5 text-sm px-3'
+            >
+              <UserPlus size={14} />
+              Add
+            </Button>
+          </div>
+        )}
         {participantError && (
           <p
             className='text-xs flex items-center gap-1 mt-1'
@@ -307,8 +296,6 @@ export default function MeetingForm({
             <span aria-hidden>⚠</span> {participantError}
           </p>
         )}
-
-        {/* Chips */}
         {form.participants.length > 0 && (
           <div className='flex flex-wrap gap-2 mt-2'>
             {form.participants.map((email) => (
@@ -322,55 +309,72 @@ export default function MeetingForm({
                 }}
               >
                 {email}
-                <button
-                  type='button'
-                  onClick={() => removeParticipant(email)}
-                  className='flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200 transition-colors'
-                  aria-label={`Remove ${email}`}
-                >
-                  <X size={10} />
-                </button>
+                {isAdmin && (
+                  <button
+                    type='button'
+                    onClick={() => removeParticipant(email)}
+                    className='flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200 transition-colors'
+                  >
+                    <X size={10} />
+                  </button>
+                )}
               </span>
             ))}
           </div>
         )}
       </FormField>
 
-      {/* Actions */}
-      <div
-        className='flex items-center justify-end gap-2 pt-2 border-t'
-        style={{ borderColor: 'var(--of-border)' }}
-      >
-        <Button
-          type='button'
-          variant='ghost'
-          onClick={onCancel}
-          disabled={loading}
-          className='text-sm'
+      {/* Actions — admin only */}
+      {isAdmin && (
+        <div
+          className='flex items-center justify-end gap-2 pt-2 border-t'
+          style={{ borderColor: 'var(--of-border)' }}
         >
-          Cancel
-        </Button>
-        <Button
-          type='submit'
-          disabled={loading}
-          style={{ background: 'var(--of-blue)' }}
-          className='text-white hover:opacity-90 text-sm min-w-32 flex items-center gap-2'
+          <Button
+            type='button'
+            variant='ghost'
+            onClick={onCancel}
+            disabled={loading}
+            className='text-sm'
+          >
+            Cancel
+          </Button>
+          <Button
+            type='submit'
+            disabled={loading}
+            style={{ background: 'var(--of-blue)' }}
+            className='text-white hover:opacity-90 text-sm min-w-32 flex items-center gap-2'
+          >
+            {loading && <Loader2 size={14} className='animate-spin' />}
+            {loading
+              ? isEdit
+                ? 'Saving...'
+                : 'Creating...'
+              : isEdit
+                ? 'Save changes'
+                : 'Create meeting'}
+          </Button>
+        </div>
+      )}
+      {!isAdmin && (
+        <div
+          className='flex justify-end pt-2 border-t'
+          style={{ borderColor: 'var(--of-border)' }}
         >
-          {loading && <Loader2 size={14} className='animate-spin' />}
-          {loading
-            ? isEdit
-              ? 'Saving...'
-              : 'Creating...'
-            : isEdit
-              ? 'Save changes'
-              : 'Create meeting'}
-        </Button>
-      </div>
+          <Button
+            type='button'
+            variant='ghost'
+            onClick={onCancel}
+            className='text-sm'
+          >
+            Close
+          </Button>
+        </div>
+      )}
     </form>
   )
 }
 
-// ─── Sub-component ─────────────────────────────────────────────────────────────
 function FormField({
   label,
   required,

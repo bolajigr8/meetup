@@ -1,3 +1,4 @@
+// src/schemas/task.schemas.ts
 import { z } from 'zod'
 
 export const createTaskSchema = z.object({
@@ -6,26 +7,22 @@ export const createTaskSchema = z.object({
     .min(3, 'Title must be at least 3 characters')
     .max(100, 'Title must be under 100 characters')
     .trim(),
-
   description: z
     .string()
     .max(500, 'Description must be under 500 characters')
     .trim()
     .optional(),
-
   dueDate: z
     .string({ message: 'Due date is required' })
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Due date must be in YYYY-MM-DD format'),
-
   priority: z.enum(['low', 'medium', 'high']).default('medium'),
-
   category: z.string().max(50).trim().optional(),
-
-  assignedTo: z
+  assignedToEmail: z
     .string()
-    .email('assignedTo must be a valid email')
+    .email('assignedToEmail must be a valid email')
     .optional()
     .or(z.literal('')),
+  assignedTo: z.array(z.string().min(1)).default([]),
 })
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>
@@ -40,7 +37,8 @@ export const updateTaskSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   status: z.enum(['todo', 'in_progress', 'completed', 'overdue']).optional(),
   category: z.string().max(50).trim().nullable().optional(),
-  assignedTo: z.string().email().nullable().optional().or(z.literal('')),
+  assignedToEmail: z.string().email().nullable().optional().or(z.literal('')),
+  assignedTo: z.array(z.string().min(1)).optional(),
 })
 
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>

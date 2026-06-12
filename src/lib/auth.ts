@@ -1,4 +1,4 @@
-// src/auth.ts  ← move to src root, not src/lib
+// src/lib/auth.ts
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 import Credentials from 'next-auth/providers/credentials'
@@ -40,6 +40,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.name,
           image: user.image ?? null,
+          isAdmin: user.isAdmin ?? false,
+          isSuperAdmin: user.isSuperAdmin ?? false,
         }
       },
     }),
@@ -65,7 +67,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
           return true
         }
-        // Collision — redirect to link-account with pending token
         const token = await createPendingGoogleToken({
           email: user.email,
           name: user.name ?? existingUser.name,
@@ -91,29 +92,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user && account) {
         if (account.provider === 'credentials') {
           token.id = user.id
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          token.isAdmin = (user as any).isAdmin ?? false
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          token.isSuperAdmin = (user as any).isSuperAdmin ?? false
         } else {
           await connectToDatabase()
           const dbUser = await User.findOne({
             email: token.email?.toLowerCase(),
-          }).select('_id passwordChangedAt')
+          }).select('_id passwordChangedAt isAdmin isSuperAdmin')
           if (!dbUser) {
             token.id = undefined
             return token
           }
           token.id = dbUser._id.toString()
+          token.isAdmin = dbUser.isAdmin ?? false
+          token.isSuperAdmin = dbUser.isSuperAdmin ?? false
           token.passwordChangedAt = dbUser.passwordChangedAt
             ? Math.floor(dbUser.passwordChangedAt.getTime() / 1000)
             : undefined
         }
       }
-      // Subsequent requests — check for password change
+      // Subsequent requests — re-check admin status and password change
       if (token.id && !user) {
         await connectToDatabase()
-        const dbUser = await User.findById(token.id).select('passwordChangedAt')
+        const dbUser = await User.findById(token.id).select(
+          'passwordChangedAt isAdmin isSuperAdmin',
+        )
         if (!dbUser) {
           token.id = undefined
           return token
         }
+        // Always refresh admin flags on every request so promotions take effect
+        token.isAdmin = dbUser.isAdmin ?? false
+        token.isSuperAdmin = dbUser.isSuperAdmin ?? false
+
         if (
           dbUser.passwordChangedAt &&
           token.iat &&
@@ -132,18 +145,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user = undefined as never
         return session
       }
-      if (session.user) session.user.id = token.id as string
+      if (session.user) {
+        session.user.id = token.id as string
+        session.user.isAdmin = (token.isAdmin as boolean) ?? false
+        session.user.isSuperAdmin = (token.isSuperAdmin as boolean) ?? false
+      }
       return session
     },
   },
 })
 
-// ─── Pending Google Token ─────────────────────────────────────────────────────
-// Lazy import jose so it never runs at module evaluation time during build
 import * as jose from 'jose'
 
 async function getPendingTokenSecret() {
-  // ✅ Lazy — only called at runtime, never at build time
   return new TextEncoder().encode(process.env.NEXTAUTH_SECRET!)
 }
 

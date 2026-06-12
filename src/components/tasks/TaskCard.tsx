@@ -1,3 +1,6 @@
+// src/components/tasks/TaskCard.tsx
+'use client'
+
 import {
   Calendar,
   User,
@@ -6,6 +9,7 @@ import {
   CheckCircle2,
   Circle,
 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +26,8 @@ export interface Task {
   priority: 'low' | 'medium' | 'high'
   status: 'todo' | 'in_progress' | 'completed' | 'overdue'
   category?: string
-  assignedTo?: string
+  assignedToEmail?: string
+  assignedTo?: { id: string; name: string; email: string }[]
 }
 
 const priorityStyles: Record<Task['priority'], { bg: string; text: string }> = {
@@ -51,6 +56,9 @@ export default function TaskCard({
   onDelete,
   onToggle,
 }: TaskCardProps) {
+  const { data: session } = useSession()
+  const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+
   const pStyle = priorityStyles[task.priority]
   const sStyle = statusStyles[task.status]
   const done = task.status === 'completed'
@@ -61,11 +69,12 @@ export default function TaskCard({
       style={{ borderColor: 'var(--of-border)' }}
     >
       <div className='flex items-start gap-3'>
-        {/* Checkbox */}
+        {/* Checkbox — only admins can toggle */}
         <button
-          onClick={() => onToggle?.(task.id)}
-          className='mt-0.5 shrink-0 transition-colors hover:opacity-70'
+          onClick={() => isAdmin && onToggle?.(task.id)}
+          className={`mt-0.5 shrink-0 transition-colors ${isAdmin ? 'hover:opacity-70' : 'cursor-default'}`}
           style={{ color: done ? 'var(--of-emerald)' : '#cbd5e1' }}
+          disabled={!isAdmin}
         >
           {done ? (
             <CheckCircle2 size={18} fill='var(--of-emerald)' color='white' />
@@ -74,7 +83,6 @@ export default function TaskCard({
           )}
         </button>
 
-        {/* Content */}
         <div className='flex-1 min-w-0'>
           <div className='flex items-start justify-between gap-2'>
             <h3
@@ -86,28 +94,30 @@ export default function TaskCard({
             >
               {task.title}
             </h3>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant='ghost'
-                  size='icon'
-                  className='h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0'
-                >
-                  <MoreHorizontal size={13} />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='end' className='w-32'>
-                <DropdownMenuItem onClick={() => onEdit?.(task.id)}>
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => onDelete?.(task.id)}
-                  className='text-red-600 focus:text-red-600 focus:bg-red-50'
-                >
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {isAdmin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant='ghost'
+                    size='icon'
+                    className='h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0'
+                  >
+                    <MoreHorizontal size={13} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end' className='w-32'>
+                  <DropdownMenuItem onClick={() => onEdit?.(task.id)}>
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onDelete?.(task.id)}
+                    className='text-red-600 focus:text-red-600 focus:bg-red-50'
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
 
           {task.description && (
@@ -119,7 +129,6 @@ export default function TaskCard({
             </p>
           )}
 
-          {/* Meta row */}
           <div className='flex flex-wrap items-center gap-2.5 mt-2.5'>
             <div className='flex items-center gap-1'>
               <Calendar size={11} style={{ color: 'var(--of-muted)' }} />
@@ -137,14 +146,14 @@ export default function TaskCard({
               </span>
             </div>
 
-            {task.assignedTo && (
+            {task.assignedToEmail && (
               <div className='flex items-center gap-1'>
                 <User size={11} style={{ color: 'var(--of-muted)' }} />
                 <span
                   className='text-[11px] truncate max-w-30'
                   style={{ color: 'var(--of-body)' }}
                 >
-                  {task.assignedTo}
+                  {task.assignedToEmail}
                 </span>
               </div>
             )}
@@ -169,7 +178,6 @@ export default function TaskCard({
             </span>
           </div>
 
-          {/* Status */}
           <div className='mt-2'>
             <span
               className='text-[10px] font-semibold'

@@ -1,23 +1,34 @@
-// page: /settings
-
+// src/app/(dashboard)/settings/page.tsx
 'use client'
 
 import { useState } from 'react'
-import { User, Lock, Bell } from 'lucide-react'
+import { User, Lock, Bell, ShieldCheck } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import PageHeader from '@/components/shared/PageHeader'
 import ProfileForm from '@/components/settings/Profileform'
 import NotificationPrefsForm from '@/components/notification/Notificationprefsform'
 import PasswordForm from '@/components/settings/Passwordform'
+import UserManagement from '@/components/settings/UserManagement'
 
-const TABS = [
+const BASE_TABS = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'password', label: 'Password', icon: Lock },
   { id: 'notifications', label: 'Notifications', icon: Bell },
 ] as const
 
-type TabId = (typeof TABS)[number]['id']
+type TabId = 'profile' | 'password' | 'notifications' | 'users'
 
 export default function SettingsPage() {
+  const { data: session } = useSession()
+  const isSuperAdmin = session?.user?.isSuperAdmin || false
+
+  const tabs = isSuperAdmin
+    ? [
+        ...BASE_TABS,
+        { id: 'users' as const, label: 'User Roles', icon: ShieldCheck },
+      ]
+    : BASE_TABS
+
   const [activeTab, setActiveTab] = useState<TabId>('profile')
 
   return (
@@ -28,12 +39,11 @@ export default function SettingsPage() {
       />
 
       <div className='flex flex-col sm:flex-row gap-6 items-start'>
-        {/* Sidebar tabs */}
         <nav
           className='w-full sm:w-48 shrink-0 bg-white rounded-xl border overflow-hidden'
           style={{ borderColor: 'var(--of-border)' }}
         >
-          {TABS.map(({ id, label, icon: Icon }) => {
+          {tabs.map(({ id, label, icon: Icon }) => {
             const active = activeTab === id
             return (
               <button
@@ -59,7 +69,6 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        {/* Content panel */}
         <div
           className='flex-1 bg-white rounded-xl border p-6'
           style={{ borderColor: 'var(--of-border)' }}
@@ -86,6 +95,14 @@ export default function SettingsPage() {
               description='Choose which email reminders you want to receive.'
             >
               <NotificationPrefsForm />
+            </Section>
+          )}
+          {activeTab === 'users' && isSuperAdmin && (
+            <Section
+              title='User Roles'
+              description='Promote or demote users to admin. Admins can create and manage all meetings, tasks, and programs.'
+            >
+              <UserManagement />
             </Section>
           )}
         </div>

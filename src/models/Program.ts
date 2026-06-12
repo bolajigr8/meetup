@@ -1,11 +1,13 @@
+// src/models/Program.ts
 import mongoose, { Schema, Document, Types } from 'mongoose'
 
 export interface IProgram extends Document {
   title: string
   description?: string
-  startDate: string // YYYY-MM-DD
-  endDate: string // YYYY-MM-DD
+  startDate: string
+  endDate: string
   participants: string[]
+  assignedTo: Types.ObjectId[]
   scheduleType: 'standard' | 'intensive'
   status: 'upcoming' | 'active' | 'completed' | 'cancelled'
   createdBy: Types.ObjectId
@@ -31,6 +33,10 @@ const ProgramSchema = new Schema<IProgram>(
     startDate: { type: String, required: true },
     endDate: { type: String, required: true },
     participants: { type: [String], default: [] },
+    assignedTo: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
     scheduleType: {
       type: String,
       enum: ['standard', 'intensive'],
@@ -41,13 +47,18 @@ const ProgramSchema = new Schema<IProgram>(
       enum: ['upcoming', 'active', 'completed', 'cancelled'],
       default: 'upcoming',
     },
-    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
   },
   { timestamps: true },
 )
 
 ProgramSchema.index({ createdBy: 1, status: 1 })
 ProgramSchema.index({ createdBy: 1, startDate: 1 })
+ProgramSchema.index({ assignedTo: 1 })
 
 export default mongoose.models.Program ||
   mongoose.model<IProgram>('Program', ProgramSchema)

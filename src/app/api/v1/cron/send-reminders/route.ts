@@ -1,7 +1,4 @@
-// route: GET /api/v1/cron/send-reminders
-// Called every 15 minutes by cron-job.org
-// Secured via Authorization: Bearer <CRON_SECRET>
-
+// src/app/api/v1/cron/send-reminders/route.ts
 import { NextResponse } from 'next/server'
 import { connectToDatabase } from '@/lib/db'
 import {
@@ -16,65 +13,78 @@ import User from '@/models/User'
 import ReminderLog from '@/models/ReminderLog'
 import type { ReminderType } from '@/models/ReminderLog'
 
-// ─── Auth guard ───────────────────────────────────────────────────────────────
-
 function isAuthorized(req: Request): boolean {
   const header = req.headers.get('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : ''
   return token === process.env.CRON_SECRET
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** Returns today and tomorrow as YYYY-MM-DD strings in WAT (UTC+1) */
 function getWATDateStrings(): { todayStr: string; tomorrowStr: string } {
-  // Shift UTC clock forward by 1 hour to get WAT wall time
   const nowWAT = new Date(Date.now() + 60 * 60 * 1000)
-
   const todayStr = `${nowWAT.getUTCFullYear()}-${pad(nowWAT.getUTCMonth() + 1)}-${pad(nowWAT.getUTCDate())}`
-
   const tmrWAT = new Date(nowWAT)
   tmrWAT.setUTCDate(nowWAT.getUTCDate() + 1)
   const tomorrowStr = `${tmrWAT.getUTCFullYear()}-${pad(tmrWAT.getUTCMonth() + 1)}-${pad(tmrWAT.getUTCDate())}`
-
   return { todayStr, tomorrowStr }
 }
 
-/**
- * Converts a WAT date string + time string into a UTC Date.
- * date:     "YYYY-MM-DD"
- * time:     "HH:mm"
- * WAT = UTC+1, so UTC = WAT - 1hr
- */
 function watToUTC(date: string, time: string): Date {
   const [year, month, day] = date.split('-').map(Number)
   const [hour, minute] = time.split(':').map(Number)
   return new Date(Date.UTC(year, month - 1, day, hour - 1, minute))
 }
 
-/**
- * Checks whether `now` falls within ±WINDOW_MS of `targetTime`.
- * Used so we don't need the cron to fire at an exact second.
- * Window = 7 min  (half of 15-min cron interval, with 2 min safety margin)
- */
 const WINDOW_MS = 7 * 60 * 1000
 
 function inWindow(targetTime: Date, now: Date): boolean {
   return Math.abs(targetTime.getTime() - now.getTime()) <= WINDOW_MS
 }
 
-// ─── GET handler ─────────────────────────────────────────────────────────────
+// Resolves all email addresses to notify for a given entity:
+// - All registered users in assignedTo array (looked up by ID)
+// - All addresses in participants array (external, no account needed)
+// Returns deduplicated list of { email, name } objects
+async function resolveRecipients(
+  assignedToIds: string[],
+  participantEmails: string[],
+): Promise<{ email: string; name: string }[]> {
+  const recipients: { email: string; name: string }[] = []
+  const seen = new Set<string>()
+
+  if (assignedToIds.length > 0) {
+    const users = await User.find({ _id: { $in: assignedToIds } })
+      .select('email name')
+      .lean()
+    for (const u of users) {
+      const email = u.email.toLowerCase()
+      if (!seen.has(email)) {
+        seen.add(email)
+        recipients.push({ email, name: u.name })
+      }
+    }
+  }
+
+  for (const email of participantEmails) {
+    const normalized = email.toLowerCase()
+    if (!seen.has(normalized)) {
+      seen.add(normalized)
+      // External participants get a generic name derived from their email
+      const name = normalized.split('@')[0]
+      recipients.push({ email: normalized, name })
+    }
+  }
+
+  return recipients
+}
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isAuthorized(req))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
 
   try {
     await connectToDatabase()
-
     const now = new Date()
     const { todayStr, tomorrowStr } = getWATDateStrings()
 
@@ -85,9 +95,7 @@ export async function GET(req: Request) {
       errors: [] as string[],
     }
 
-    // ── Meetings ─────────────────────────────────────────────────────────────
-    // Fetch all upcoming meetings for today and tomorrow.
-    // We check today too because the 2hr/30min windows can fall on the same day.
+    // ── Meetings ──────────────────────────────────────────────────────────────
     const meetings = await Meeting.find({
       status: 'upcoming',
       date: { $in: [todayStr, tomorrowStr] },
@@ -97,13 +105,9 @@ export async function GET(req: Request) {
       try {
         const meetingUTC = watToUTC(meeting.date, meeting.startTime)
         const msUntilMeeting = meetingUTC.getTime() - now.getTime()
-
-        // Skip meetings that have already started or are more than 25 hours away
         if (msUntilMeeting < 0 || msUntilMeeting > 25 * 60 * 60 * 1000) continue
 
-        // Determine which reminder window we're in
         let reminderType: ReminderType | null = null
-
         const target1day = new Date(meetingUTC.getTime() - 24 * 60 * 60 * 1000)
         const target2hr = new Date(meetingUTC.getTime() - 2 * 60 * 60 * 1000)
         const target30min = new Date(meetingUTC.getTime() - 30 * 60 * 1000)
@@ -111,31 +115,33 @@ export async function GET(req: Request) {
         if (inWindow(target1day, now)) reminderType = '1day'
         else if (inWindow(target2hr, now)) reminderType = '2hr'
         else if (inWindow(target30min, now)) reminderType = '30min'
-
         if (!reminderType) continue
 
-        // Deduplicate — skip if already sent
         const alreadySent = await ReminderLog.exists({
           entityId: meeting._id,
           reminderType,
         })
         if (alreadySent) continue
 
-        // Fetch user
-        const user = await User.findById(meeting.createdBy)
-          .select('email name')
-          .lean()
-        if (!user) continue
-
-        // Send email
-        await sendMeetingReminderEmail(
-          user.email,
-          user.name,
-          meeting,
-          reminderType,
+        // Resolve all recipients: assigned users + external participants
+        const assignedIds = (meeting.assignedTo ?? []).map((id) =>
+          id.toString(),
+        )
+        const recipients = await resolveRecipients(
+          assignedIds,
+          meeting.participants ?? [],
         )
 
-        // Record it
+        for (const { email, name } of recipients) {
+          try {
+            await sendMeetingReminderEmail(email, name, meeting, reminderType)
+          } catch (emailErr) {
+            results.errors.push(
+              `Meeting ${meeting._id} email to ${email}: ${(emailErr as Error).message}`,
+            )
+          }
+        }
+
         await ReminderLog.create({
           entityId: meeting._id,
           entityType: 'meeting',
@@ -150,7 +156,6 @@ export async function GET(req: Request) {
     }
 
     // ── Tasks ─────────────────────────────────────────────────────────────────
-    // Send a single "due tomorrow" reminder for tasks with dueDate = tomorrow
     const tasks = await Task.find({
       status: { $in: ['todo', 'in_progress'] },
       dueDate: tomorrowStr,
@@ -164,12 +169,33 @@ export async function GET(req: Request) {
         })
         if (alreadySent) continue
 
-        const user = await User.findById(task.createdBy)
+        const assignedIds = (task.assignedTo ?? []).map((id) => id.toString())
+        // Tasks also include assignedToEmail as a standalone external recipient
+        const externalEmails = task.assignedToEmail
+          ? [task.assignedToEmail]
+          : []
+        const recipients = await resolveRecipients(assignedIds, externalEmails)
+
+        // Always also email the creator
+        const creator = await User.findById(task.createdBy)
           .select('email name')
           .lean()
-        if (!user) continue
+        if (creator) {
+          const creatorEmail = creator.email.toLowerCase()
+          if (!recipients.find((r) => r.email === creatorEmail)) {
+            recipients.push({ email: creatorEmail, name: creator.name })
+          }
+        }
 
-        await sendTaskReminderEmail(user.email, user.name, task)
+        for (const { email, name } of recipients) {
+          try {
+            await sendTaskReminderEmail(email, name, task)
+          } catch (emailErr) {
+            results.errors.push(
+              `Task ${task._id} email to ${email}: ${(emailErr as Error).message}`,
+            )
+          }
+        }
 
         await ReminderLog.create({
           entityId: task._id,
@@ -185,7 +211,6 @@ export async function GET(req: Request) {
     }
 
     // ── Programs ──────────────────────────────────────────────────────────────
-    // Send a single "starting tomorrow" reminder for programs with startDate = tomorrow
     const programs = await Program.find({
       status: 'upcoming',
       startDate: tomorrowStr,
@@ -199,12 +224,23 @@ export async function GET(req: Request) {
         })
         if (alreadySent) continue
 
-        const user = await User.findById(program.createdBy)
-          .select('email name')
-          .lean()
-        if (!user) continue
+        const assignedIds = (program.assignedTo ?? []).map((id) =>
+          id.toString(),
+        )
+        const recipients = await resolveRecipients(
+          assignedIds,
+          program.participants ?? [],
+        )
 
-        await sendProgramReminderEmail(user.email, user.name, program)
+        for (const { email, name } of recipients) {
+          try {
+            await sendProgramReminderEmail(email, name, program)
+          } catch (emailErr) {
+            results.errors.push(
+              `Program ${program._id} email to ${email}: ${(emailErr as Error).message}`,
+            )
+          }
+        }
 
         await ReminderLog.create({
           entityId: program._id,
@@ -220,7 +256,6 @@ export async function GET(req: Request) {
     }
 
     console.log('[cron] send-reminders completed', results)
-
     return NextResponse.json({ ok: true, ...results })
   } catch (err) {
     console.error('[cron] send-reminders fatal error:', err)
