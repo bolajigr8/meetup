@@ -43,7 +43,9 @@ export default function TaskForm({
           dueDate: initialData.dueDate,
           priority: initialData.priority,
           category: initialData.category ?? 'General',
-          assignedTo: initialData.assignedTo ?? '',
+          assignedTo: Array.isArray(initialData.assignedTo)
+            ? (initialData.assignedTo[0]?.email ?? '')
+            : (initialData.assignedTo ?? ''),
         }
       : TASK_FORM_INITIAL,
   )
