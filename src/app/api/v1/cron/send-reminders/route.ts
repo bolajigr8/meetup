@@ -1,5 +1,6 @@
 // src/app/api/v1/cron/send-reminders/route.ts
 import { NextResponse } from 'next/server'
+import { Types } from 'mongoose'
 import { connectToDatabase } from '@/lib/db'
 import {
   sendMeetingReminderEmail,
@@ -124,8 +125,8 @@ export async function GET(req: Request) {
         if (alreadySent) continue
 
         // Resolve all recipients: assigned users + external participants
-        const assignedIds = (meeting.assignedTo ?? []).map((id) =>
-          id.toString(),
+        const assignedIds = (meeting.assignedTo ?? []).map(
+          (id: Types.ObjectId) => id.toString(),
         )
         const recipients = await resolveRecipients(
           assignedIds,
@@ -169,7 +170,9 @@ export async function GET(req: Request) {
         })
         if (alreadySent) continue
 
-        const assignedIds = (task.assignedTo ?? []).map((id) => id.toString())
+        const assignedIds = (task.assignedTo ?? []).map((id: Types.ObjectId) =>
+          id.toString(),
+        )
         // Tasks also include assignedToEmail as a standalone external recipient
         const externalEmails = task.assignedToEmail
           ? [task.assignedToEmail]
@@ -224,8 +227,8 @@ export async function GET(req: Request) {
         })
         if (alreadySent) continue
 
-        const assignedIds = (program.assignedTo ?? []).map((id) =>
-          id.toString(),
+        const assignedIds = (program.assignedTo ?? []).map(
+          (id: Types.ObjectId) => id.toString(),
         )
         const recipients = await resolveRecipients(
           assignedIds,
