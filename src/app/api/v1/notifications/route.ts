@@ -10,11 +10,7 @@ import Meeting from '@/models/Meeting'
 import Task from '@/models/Task'
 import Program from '@/models/Program'
 
-// ── Lazy notification generation ────────────────────────────────────────────
-// Generates notifications for events that don't have one yet.
-// Called on every GET so the inbox stays fresh without a cron job.
-
-async function generateNotifications(userId: string) {
+async function generateNotifications(userId: string, isAdmin: boolean) {
   const uid = new Types.ObjectId(userId)
 
   const today = new Date()
@@ -36,43 +32,42 @@ async function generateNotifications(userId: string) {
   const in2DaysStr = fmt(in2Days)
   const in3DaysStr = fmt(in3Days)
 
-  // ── Overdue tasks ──────────────────────────────────────────────────────────
+  // Admins see notifications for items they created
+  // Regular users see notifications for items assigned to them
+  const ownerFilter = isAdmin ? { createdBy: uid } : { assignedTo: uid }
+
   const overdueTasks = await Task.find({
-    createdBy: uid,
+    ...ownerFilter,
     status: { $in: ['todo', 'in_progress'] },
     dueDate: { $lt: todayStr },
   })
     .select('_id title dueDate')
     .lean()
 
-  // ── Tasks due tomorrow ─────────────────────────────────────────────────────
   const dueSoonTasks = await Task.find({
-    createdBy: uid,
+    ...ownerFilter,
     status: { $in: ['todo', 'in_progress'] },
     dueDate: tomorrowStr,
   })
     .select('_id title dueDate')
     .lean()
 
-  // ── Meetings in next 2 days ────────────────────────────────────────────────
   const upcomingMeetings = await Meeting.find({
-    createdBy: uid,
+    ...ownerFilter,
     status: 'upcoming',
     date: { $in: [tomorrowStr, in2DaysStr] },
   })
     .select('_id title date startTime')
     .lean()
 
-  // ── Programs starting in next 3 days ──────────────────────────────────────
   const startingPrograms = await Program.find({
-    createdBy: uid,
+    ...ownerFilter,
     status: 'upcoming',
     startDate: { $in: [tomorrowStr, in2DaysStr, in3DaysStr] },
   })
     .select('_id title startDate')
     .lean()
 
-  // Build notifications to upsert (avoid duplicates per entity per day)
   type NotifDoc = {
     userId: Types.ObjectId
     type: string
@@ -130,7 +125,6 @@ async function generateNotifications(userId: string) {
     })
   }
 
-  // Upsert — one notification per entity (avoid flooding)
   await Promise.all(
     toUpsert.map((n) =>
       Notification.findOneAndUpdate(
@@ -142,7 +136,6 @@ async function generateNotifications(userId: string) {
   )
 }
 
-// ── GET — list notifications ─────────────────────────────────────────────────
 export const GET = withErrorHandler(async (req) => {
   const session = await auth()
   if (!session?.user?.id)
@@ -150,8 +143,8 @@ export const GET = withErrorHandler(async (req) => {
 
   await connectToDatabase()
 
-  // Lazy-generate fresh notifications before returning
-  await generateNotifications(session.user.id)
+  const isAdmin = !!(session.user.isAdmin || session.user.isSuperAdmin)
+  await generateNotifications(session.user.id, isAdmin)
 
   const url = new URL(req.url)
   const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1'))
@@ -191,7 +184,6 @@ export const GET = withErrorHandler(async (req) => {
   })
 })
 
-// ── PATCH — mark all as read ──────────────────────────────────────────────────
 export const PATCH = withErrorHandler(async () => {
   const session = await auth()
   if (!session?.user?.id)

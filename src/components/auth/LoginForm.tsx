@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-// import GoogleButton from './GoogleButton'
 
 export default function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') ?? '/overview'
+  const reset = searchParams.get('reset')
+  const registered = searchParams.get('registered')
 
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
@@ -20,6 +20,13 @@ export default function LoginForm() {
     setError('')
     setLoading(true)
 
+    const destination =
+      callbackUrl.startsWith('/') && !callbackUrl.startsWith('/login')
+        ? callbackUrl
+        : '/overview'
+
+    // Use redirect: true — NextAuth sets the cookie then redirects server-side
+    // so the middleware always sees the session on the first request after login
     const result = await signIn('credentials', {
       email: form.email,
       password: form.password,
@@ -32,13 +39,38 @@ export default function LoginForm() {
       return
     }
 
-    router.push(callbackUrl)
-    router.refresh()
+    // Sign-in succeeded — do a full page navigation so the browser
+    // sends the new session cookie on the very next request
+    window.location.replace(destination)
   }
 
   return (
     <div className='flex flex-col gap-4'>
-      {/* <GoogleButton label="Sign in with Google" /> */}
+      {reset === 'success' && (
+        <div
+          className='flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm'
+          style={{
+            background: '#F0FDF4',
+            border: '1px solid #BBF7D0',
+            color: '#166534',
+          }}
+        >
+          Password updated successfully. Please sign in with your new password.
+        </div>
+      )}
+
+      {registered === 'true' && (
+        <div
+          className='flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm'
+          style={{
+            background: '#F0FDF4',
+            border: '1px solid #BBF7D0',
+            color: '#166534',
+          }}
+        >
+          Account created! Please sign in below.
+        </div>
+      )}
 
       <Divider />
 
@@ -93,7 +125,7 @@ export default function LoginForm() {
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
 
-function Divider() {
+export function Divider() {
   return (
     <div className='flex items-center gap-3'>
       <div className='flex-1 h-px' style={{ background: 'var(--of-border)' }} />
@@ -101,14 +133,14 @@ function Divider() {
         className='text-xs font-medium'
         style={{ color: 'var(--of-muted)' }}
       >
-        or
+        or continue with email
       </span>
       <div className='flex-1 h-px' style={{ background: 'var(--of-border)' }} />
     </div>
   )
 }
 
-function ErrorBanner({ message }: { message: string }) {
+export function ErrorBanner({ message }: { message: string }) {
   return (
     <div
       className='flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm'
@@ -136,7 +168,7 @@ function ErrorBanner({ message }: { message: string }) {
   )
 }
 
-function Field({
+export function Field({
   label,
   type,
   value,
@@ -179,7 +211,13 @@ function Field({
   )
 }
 
-function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
+export function SubmitButton({
+  loading,
+  label,
+}: {
+  loading: boolean
+  label: string
+}) {
   return (
     <button
       type='submit'
@@ -209,9 +247,7 @@ function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
           <path d='M21 12a9 9 0 00-9-9' />
         </svg>
       )}
-      {loading ? 'Signing in...' : label}
+      {loading ? 'Please wait...' : label}
     </button>
   )
 }
-
-export { Divider, ErrorBanner, Field, SubmitButton }

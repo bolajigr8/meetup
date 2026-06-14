@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, CheckSquare } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import PageHeader from '@/components/shared/PageHeader'
@@ -23,6 +24,9 @@ type StatusFilter = (typeof STATUS_FILTERS)[number]
 type PriorityFilter = (typeof PRIORITY_FILTERS)[number]
 
 export default function TasksPage() {
+  const { data: session, status: sessionStatus } = useSession()
+  const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -39,7 +43,6 @@ export default function TasksPage() {
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (priorityFilter !== 'all') params.set('priority', priorityFilter)
       const qs = params.toString() ? `?${params.toString()}` : ''
-
       const res = await fetch(`/api/v1/tasks${qs}`)
       const json = await res.json()
       if (!res.ok)
@@ -53,20 +56,25 @@ export default function TasksPage() {
   }, [statusFilter, priorityFilter])
 
   useEffect(() => {
-    fetchTasks()
-  }, [fetchTasks])
+    if (sessionStatus !== 'loading') fetchTasks()
+  }, [fetchTasks, sessionStatus])
 
   const openCreateDialog = () => {
+    if (!isAdmin) return
     setSelectedTask(undefined)
     setTaskDialogOpen(true)
   }
+
   const openEditDialog = (id: string) => {
+    if (!isAdmin) return
     const t = tasks.find((t) => t.id === id)
     if (!t) return
     setSelectedTask(t)
     setTaskDialogOpen(true)
   }
+
   const openDeleteDialog = (id: string) => {
+    if (!isAdmin) return
     const t = tasks.find((t) => t.id === id)
     if (!t) return
     setSelectedTask(t)
@@ -78,18 +86,14 @@ export default function TasksPage() {
     setSelectedTask(undefined)
   }
 
-  // Toggle completed ↔ todo
   const handleToggle = async (id: string) => {
+    if (!isAdmin) return
     const task = tasks.find((t) => t.id === id)
     if (!task) return
-
     const newStatus = task.status === 'completed' ? 'todo' : 'completed'
-
-    // Optimistic update
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)),
     )
-
     try {
       const res = await fetch(`/api/v1/tasks/${id}`, {
         method: 'PATCH',
@@ -102,19 +106,17 @@ export default function TasksPage() {
       }
       toast.success(
         newStatus === 'completed' ? 'Task completed' : 'Task reopened',
-        {
-          description: `"${task.title}" has been marked as ${newStatus === 'completed' ? 'done' : 'to do'}.`,
-        },
       )
     } catch (err) {
-      fetchTasks() // rollback
+      fetchTasks()
       toast.error(err instanceof Error ? err.message : 'Failed to update task')
     }
   }
 
   const handleDeleteConfirm = async (id: string) => {
+    if (!isAdmin) return
     const task = tasks.find((t) => t.id === id)
-    setTasks((prev) => prev.filter((t) => t.id !== id)) // optimistic remove
+    setTasks((prev) => prev.filter((t) => t.id !== id))
     setSelectedTask(undefined)
     try {
       const res = await fetch(`/api/v1/tasks/${id}`, { method: 'DELETE' })
@@ -125,20 +127,30 @@ export default function TasksPage() {
       toast.success('Task deleted', {
         description: task
           ? `"${task.title}" has been permanently deleted.`
-          : 'Task deleted.',
+          : '',
       })
     } catch (err) {
-      fetchTasks() // rollback
-      toast.error(
-        err instanceof Error ? err.message : 'Failed to delete task',
-        {
-          description: 'The task was restored. Please try again.',
-        },
-      )
+      fetchTasks()
+      toast.error(err instanceof Error ? err.message : 'Failed to delete task')
     }
   }
 
   const overdueCount = tasks.filter((t) => t.status === 'overdue').length
+
+  // Wait for session to load before rendering to avoid flash of wrong UI
+  if (sessionStatus === 'loading') {
+    return (
+      <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className='h-36 rounded-xl border animate-pulse'
+            style={{ background: 'var(--of-border)' }}
+          />
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -146,14 +158,16 @@ export default function TasksPage() {
         title='Tasks'
         subtitle={`${tasks.length} total${overdueCount > 0 ? ` · ${overdueCount} overdue` : ''}`}
         action={
-          <Button
-            onClick={openCreateDialog}
-            style={{ background: 'var(--of-amber)' }}
-            className='text-white hover:opacity-90'
-          >
-            <Plus size={15} className='mr-1.5' />
-            New task
-          </Button>
+          isAdmin ? (
+            <Button
+              onClick={openCreateDialog}
+              style={{ background: 'var(--of-amber)' }}
+              className='text-white hover:opacity-90'
+            >
+              <Plus size={15} className='mr-1.5' />
+              New task
+            </Button>
+          ) : undefined
         }
       />
 
@@ -223,11 +237,13 @@ export default function TasksPage() {
           title='No tasks found'
           description={
             statusFilter === 'all' && priorityFilter === 'all'
-              ? "You haven't created any tasks yet."
+              ? isAdmin
+                ? "You haven't created any tasks yet."
+                : 'No tasks have been assigned to you yet.'
               : 'No tasks match your current filters.'
           }
-          actionLabel='Create a task'
-          onAction={openCreateDialog}
+          actionLabel={isAdmin ? 'Create a task' : undefined}
+          onAction={isAdmin ? openCreateDialog : undefined}
         />
       ) : (
         <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'>
@@ -235,26 +251,31 @@ export default function TasksPage() {
             <TaskCard
               key={t.id}
               task={t}
-              onEdit={openEditDialog}
-              onDelete={openDeleteDialog}
-              onToggle={handleToggle}
+              onEdit={isAdmin ? openEditDialog : undefined}
+              onDelete={isAdmin ? openDeleteDialog : undefined}
+              onToggle={isAdmin ? handleToggle : undefined}
             />
           ))}
         </div>
       )}
 
-      <TaskDialog
-        open={taskDialogOpen}
-        onOpenChange={setTaskDialogOpen}
-        task={selectedTask}
-        onSuccess={handleSuccess}
-      />
-      <DeleteTaskDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        task={selectedTask}
-        onConfirm={handleDeleteConfirm}
-      />
+      {/* Dialogs — only rendered for admins */}
+      {isAdmin && (
+        <>
+          <TaskDialog
+            open={taskDialogOpen}
+            onOpenChange={setTaskDialogOpen}
+            task={selectedTask}
+            onSuccess={handleSuccess}
+          />
+          <DeleteTaskDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            task={selectedTask}
+            onConfirm={handleDeleteConfirm}
+          />
+        </>
+      )}
     </div>
   )
 }

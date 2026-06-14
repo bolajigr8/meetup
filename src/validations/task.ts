@@ -47,11 +47,15 @@ export const taskSchema = z.object({
     .optional()
     .or(z.literal('')),
 
-  assignedTo: z
+  // External email assignee (replaces old `assignedTo` email field)
+  assignedToEmail: z
     .string()
-    .email('Assigned-to must be a valid email')
+    .email('Must be a valid email')
     .optional()
     .or(z.literal('')),
+
+  // Registered user IDs assigned via UserSelect
+  assignedTo: z.array(z.string()).optional().default([]),
 })
 
 export type TaskFormData = z.infer<typeof taskSchema>
@@ -64,7 +68,8 @@ export const TASK_FORM_INITIAL: TaskFormData = {
   dueDate: '',
   priority: 'medium',
   category: 'General',
-  assignedTo: '',
+  assignedToEmail: '',
+  assignedTo: [],
 }
 
 export function validateTaskForm(data: TaskFormData): TaskFieldErrors {

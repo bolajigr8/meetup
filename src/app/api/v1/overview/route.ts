@@ -7,7 +7,6 @@ import Meeting from '@/models/Meeting'
 import Task from '@/models/Task'
 import Program from '@/models/Program'
 
-// Typed lean shapes — only the fields we .select()
 interface LeanMeeting {
   _id: Types.ObjectId
   title: string
@@ -22,7 +21,7 @@ interface LeanMeeting {
 interface LeanTask {
   _id: Types.ObjectId
   title: string
-  assignedTo?: string
+  assignedToEmail?: string
   priority?: string
   status: string
   dueDate?: string
@@ -58,6 +57,20 @@ export const GET = withErrorHandler(async () => {
   await connectToDatabase()
 
   const uid = session.user.id
+  const isAdmin = session.user.isAdmin || session.user.isSuperAdmin
+
+  // Admins see items they created; regular users see items assigned to them
+  const meetingFilter = isAdmin
+    ? { createdBy: new Types.ObjectId(uid) }
+    : { assignedTo: new Types.ObjectId(uid) }
+
+  const taskFilter = isAdmin
+    ? { createdBy: new Types.ObjectId(uid) }
+    : { assignedTo: new Types.ObjectId(uid) }
+
+  const programFilter = isAdmin
+    ? { createdBy: new Types.ObjectId(uid) }
+    : { assignedTo: new Types.ObjectId(uid) }
 
   const [
     upcomingMeetings,
@@ -68,27 +81,27 @@ export const GET = withErrorHandler(async () => {
     recentTasks,
     recentPrograms,
   ] = await Promise.all([
-    Meeting.countDocuments({ createdBy: uid, status: 'upcoming' }),
+    Meeting.countDocuments({ ...meetingFilter, status: 'upcoming' }),
     Task.countDocuments({
-      createdBy: uid,
+      ...taskFilter,
       status: { $in: ['todo', 'in_progress'] },
     }),
-    Task.countDocuments({ createdBy: uid, status: 'overdue' }),
-    Program.countDocuments({ createdBy: uid, status: 'active' }),
+    Task.countDocuments({ ...taskFilter, status: 'overdue' }),
+    Program.countDocuments({ ...programFilter, status: 'active' }),
 
-    Meeting.find({ createdBy: uid })
+    Meeting.find(meetingFilter)
       .sort({ createdAt: -1 })
       .limit(4)
       .select('title participants location status date startTime createdAt')
       .lean<LeanMeeting[]>(),
 
-    Task.find({ createdBy: uid })
+    Task.find(taskFilter)
       .sort({ createdAt: -1 })
       .limit(4)
-      .select('title assignedTo priority status dueDate createdAt')
+      .select('title assignedToEmail priority status dueDate createdAt')
       .lean<LeanTask[]>(),
 
-    Program.find({ createdBy: uid })
+    Program.find(programFilter)
       .sort({ createdAt: -1 })
       .limit(4)
       .select('title participants scheduleType status startDate createdAt')
@@ -114,7 +127,9 @@ export const GET = withErrorHandler(async () => {
     id: doc._id.toString(),
     type: 'task' as const,
     title: doc.title,
-    subtitle: doc.assignedTo ? `Assigned to ${doc.assignedTo}` : 'No assignee',
+    subtitle: doc.assignedToEmail
+      ? `Assigned to ${doc.assignedToEmail}`
+      : 'No assignee',
     time: doc.dueDate ? `Due ${doc.dueDate}` : 'No due date',
     status: doc.status,
     priority: doc.priority,

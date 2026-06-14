@@ -48,25 +48,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
+      // Credentials sign-in is handled entirely in authorize()
       if (account?.provider === 'credentials') return true
       if (!user.email) return false
+
       await connectToDatabase()
       const existingUser = await User.findOne({
         email: user.email.toLowerCase(),
       })
+
       if (existingUser) {
         const hasGoogle = existingUser.providers.some(
           (p: { provider: string }) => p.provider === 'google',
         )
         if (hasGoogle) {
+          // Update avatar if changed
           if (user.image && user.image !== existingUser.image) {
             await User.updateOne(
               { _id: existingUser._id },
-              { image: user.image },
+              { $set: { image: user.image } },
             )
           }
           return true
         }
+        // Email exists with credentials — redirect to link-account flow
         const token = await createPendingGoogleToken({
           email: user.email,
           name: user.name ?? existingUser.name,
@@ -75,32 +80,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         })
         return `/link-account?pendingToken=${token}`
       }
+
+      // New Google user — create account
       await User.create({
         email: user.email.toLowerCase(),
         name: user.name ?? user.email.split('@')[0],
         passwordHash: null,
         emailVerified: new Date(),
         image: user.image ?? null,
+        isAdmin: false,
+        isSuperAdmin: false,
         providers: [
-          { provider: 'google', providerId: account?.providerAccountId ?? '' },
+          {
+            provider: 'google',
+            providerId: account?.providerAccountId ?? '',
+          },
         ],
       })
       return true
     },
 
     async jwt({ token, user, account }) {
+      // Initial sign-in — populate token from the user object
       if (user && account) {
         if (account.provider === 'credentials') {
           token.id = user.id
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          token.isAdmin = (user as any).isAdmin ?? false
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          token.isSuperAdmin = (user as any).isSuperAdmin ?? false
+          token.isAdmin = (user as { isAdmin?: boolean }).isAdmin ?? false
+          token.isSuperAdmin =
+            (user as { isSuperAdmin?: boolean }).isSuperAdmin ?? false
         } else {
+          // OAuth sign-in — look up DB for the real user ID and roles
           await connectToDatabase()
           const dbUser = await User.findOne({
             email: token.email?.toLowerCase(),
           }).select('_id passwordChangedAt isAdmin isSuperAdmin')
+
           if (!dbUser) {
             token.id = undefined
             return token
@@ -113,7 +127,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             : undefined
         }
       }
-      // Subsequent requests — re-check admin status and password change
+
+      // Every subsequent request — refresh admin flags from DB so promotions
+      // take effect without requiring a full sign-out/sign-in cycle
       if (token.id && !user) {
         await connectToDatabase()
         const dbUser = await User.findById(token.id).select(
@@ -123,10 +139,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.id = undefined
           return token
         }
-        // Always refresh admin flags on every request so promotions take effect
+
         token.isAdmin = dbUser.isAdmin ?? false
         token.isSuperAdmin = dbUser.isSuperAdmin ?? false
 
+        // Invalidate token if password was changed after it was issued
         if (
           dbUser.passwordChangedAt &&
           token.iat &&
@@ -137,10 +154,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return token
         }
       }
+
       return token
     },
 
     async session({ session, token }) {
+      // If token has no id the session is invalid — clear user
       if (!token.id) {
         session.user = undefined as never
         return session
@@ -154,6 +173,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 })
+
+// ─── Pending Google Token (for link-account flow) ────────────────────────────
 
 import * as jose from 'jose'
 

@@ -2,13 +2,10 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import GoogleButton from './GoogleButton'
 import { Divider, ErrorBanner, Field, SubmitButton } from './LoginForm'
 
 export default function RegisterForm() {
-  const router = useRouter()
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,6 +16,7 @@ export default function RegisterForm() {
     setLoading(true)
 
     try {
+      // Step 1: Create the account
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -28,11 +26,12 @@ export default function RegisterForm() {
       const data = await res.json()
 
       if (!res.ok) {
-        // Handle specific error codes
         if (data.error?.code === 'EMAIL_EXISTS_OAUTH') {
           setError(
-            'This email is registered with Google. Please sign in with Google instead.',
+            'This email is already registered with Google. Please sign in with Google.',
           )
+        } else if (data.error?.code === 'EMAIL_EXISTS') {
+          setError('An account with this email already exists. Please sign in.')
         } else {
           setError(data.error?.message ?? 'Something went wrong')
         }
@@ -40,15 +39,20 @@ export default function RegisterForm() {
         return
       }
 
-      // Auto sign in after successful registration
-      await signIn('credentials', {
+      // Step 2: Sign in with the new credentials
+      const signInResult = await signIn('credentials', {
         email: form.email,
         password: form.password,
         redirect: false,
       })
 
-      router.push('/overview')
-      router.refresh()
+      if (signInResult?.error) {
+        window.location.replace('/login?registered=true')
+        return
+      }
+
+      // Step 3: Full page navigation — cookie is guaranteed to exist now
+      window.location.replace('/overview')
     } catch {
       setError('Something went wrong. Please try again.')
       setLoading(false)
@@ -57,8 +61,6 @@ export default function RegisterForm() {
 
   return (
     <div className='flex flex-col gap-4'>
-      {/* <GoogleButton label="Sign up with Google" /> */}
-
       <Divider />
 
       <form onSubmit={handleSubmit} className='flex flex-col gap-4'>

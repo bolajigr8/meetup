@@ -47,7 +47,6 @@ export const GET = withErrorHandler(async (req) => {
     throw new ApiError(400, 'BAD_REQUEST', 'Invalid year or month')
   }
 
-  // Build date range strings YYYY-MM-DD
   const pad = (n: number) => String(n).padStart(2, '0')
   const monthStr = pad(month)
   const lastDay = new Date(year, month, 0).getDate()
@@ -55,25 +54,44 @@ export const GET = withErrorHandler(async (req) => {
   const rangeEnd = `${year}-${monthStr}-${pad(lastDay)}`
 
   await connectToDatabase()
-  const uid = session.user.id
+  const uid = new Types.ObjectId(session.user.id)
+  const isAdmin = session.user.isAdmin || session.user.isSuperAdmin
+
+  // Admins see what they created; users see what's assigned to them
+  const meetingFilter = isAdmin
+    ? {
+        createdBy: uid,
+        date: { $gte: rangeStart, $lte: rangeEnd },
+        status: { $ne: 'cancelled' },
+      }
+    : {
+        assignedTo: uid,
+        date: { $gte: rangeStart, $lte: rangeEnd },
+        status: { $ne: 'cancelled' },
+      }
+
+  const programFilter = isAdmin
+    ? {
+        createdBy: uid,
+        startDate: { $lte: rangeEnd },
+        endDate: { $gte: rangeStart },
+        status: { $ne: 'cancelled' },
+      }
+    : {
+        assignedTo: uid,
+        startDate: { $lte: rangeEnd },
+        endDate: { $gte: rangeStart },
+        status: { $ne: 'cancelled' },
+      }
 
   const [meetings, programs] = await Promise.all([
-    Meeting.find({
-      createdBy: uid,
-      date: { $gte: rangeStart, $lte: rangeEnd },
-      status: { $ne: 'cancelled' },
-    })
+    Meeting.find(meetingFilter)
       .select(
         'title date startTime endTime location participants priority status',
       )
       .lean<LeanMeeting[]>(),
 
-    Program.find({
-      createdBy: uid,
-      startDate: { $lte: rangeEnd },
-      endDate: { $gte: rangeStart },
-      status: { $ne: 'cancelled' },
-    })
+    Program.find(programFilter)
       .select('title startDate endDate scheduleType participants status')
       .lean<LeanProgram[]>(),
   ])

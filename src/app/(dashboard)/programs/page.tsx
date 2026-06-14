@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, GraduationCap } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import PageHeader from '@/components/shared/PageHeader'
@@ -21,6 +22,9 @@ const FILTER_OPTIONS = [
 type Filter = (typeof FILTER_OPTIONS)[number]
 
 export default function ProgramsPage() {
+  const { data: session, status: sessionStatus } = useSession()
+  const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
@@ -48,20 +52,25 @@ export default function ProgramsPage() {
   }, [filter])
 
   useEffect(() => {
-    fetchPrograms()
-  }, [fetchPrograms])
+    if (sessionStatus !== 'loading') fetchPrograms()
+  }, [fetchPrograms, sessionStatus])
 
   const openCreateDialog = () => {
+    if (!isAdmin) return
     setSelectedProgram(undefined)
     setProgramDialogOpen(true)
   }
+
   const openEditDialog = (id: string) => {
+    if (!isAdmin) return
     const p = programs.find((p) => p.id === id)
     if (!p) return
     setSelectedProgram(p)
     setProgramDialogOpen(true)
   }
+
   const openDeleteDialog = (id: string) => {
+    if (!isAdmin) return
     const p = programs.find((p) => p.id === id)
     if (!p) return
     setSelectedProgram(p)
@@ -74,6 +83,7 @@ export default function ProgramsPage() {
   }
 
   const handleDeleteConfirm = async (id: string) => {
+    if (!isAdmin) return
     setPrograms((prev) =>
       prev.map((p) =>
         p.id === id ? { ...p, status: 'cancelled' as const } : p,
@@ -86,25 +96,30 @@ export default function ProgramsPage() {
         const json = await res.json()
         throw new Error(json.error?.message ?? 'Failed to cancel program')
       }
-      toast.success('Program cancelled', {
-        description: (
-          <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
-            The program has been marked as cancelled.{' '}
-          </span>
-        ),
-      })
+      toast.success('Program cancelled')
     } catch (err) {
       fetchPrograms()
       toast.error(
         err instanceof Error ? err.message : 'Failed to cancel program',
-        {
-          description: 'The program was restored. Please try again.',
-        },
       )
     }
   }
 
   const activeCount = programs.filter((p) => p.status === 'active').length
+
+  if (sessionStatus === 'loading') {
+    return (
+      <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4'>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className='h-48 rounded-xl border animate-pulse'
+            style={{ background: 'var(--of-border)' }}
+          />
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -112,18 +127,19 @@ export default function ProgramsPage() {
         title='Training Programs'
         subtitle={`${programs.length} total · ${activeCount} active`}
         action={
-          <Button
-            onClick={openCreateDialog}
-            style={{ background: 'var(--of-teal)' }}
-            className='text-white hover:opacity-90'
-          >
-            <Plus size={15} className='mr-1.5' />
-            New program
-          </Button>
+          isAdmin ? (
+            <Button
+              onClick={openCreateDialog}
+              style={{ background: 'var(--of-teal)' }}
+              className='text-white hover:opacity-90'
+            >
+              <Plus size={15} className='mr-1.5' />
+              New program
+            </Button>
+          ) : undefined
         }
       />
 
-      {/* Filter tabs */}
       <div
         className='flex flex-wrap gap-1 p-1 rounded-lg mb-6 w-fit'
         style={{ background: 'var(--of-border)' }}
@@ -164,11 +180,13 @@ export default function ProgramsPage() {
           title='No programs found'
           description={
             filter === 'all'
-              ? "You haven't created any training programs yet."
+              ? isAdmin
+                ? "You haven't created any training programs yet."
+                : 'No programs have been assigned to you yet.'
               : `No ${filter} programs.`
           }
-          actionLabel='Create a program'
-          onAction={openCreateDialog}
+          actionLabel={isAdmin ? 'Create a program' : undefined}
+          onAction={isAdmin ? openCreateDialog : undefined}
         />
       ) : (
         <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4'>
@@ -176,25 +194,29 @@ export default function ProgramsPage() {
             <ProgramCard
               key={p.id}
               program={p}
-              onEdit={openEditDialog}
-              onDelete={openDeleteDialog}
+              onEdit={isAdmin ? openEditDialog : undefined}
+              onDelete={isAdmin ? openDeleteDialog : undefined}
             />
           ))}
         </div>
       )}
 
-      <ProgramDialog
-        open={programDialogOpen}
-        onOpenChange={setProgramDialogOpen}
-        program={selectedProgram}
-        onSuccess={handleSuccess}
-      />
-      <DeleteProgramDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        program={selectedProgram}
-        onConfirm={handleDeleteConfirm}
-      />
+      {isAdmin && (
+        <>
+          <ProgramDialog
+            open={programDialogOpen}
+            onOpenChange={setProgramDialogOpen}
+            program={selectedProgram}
+            onSuccess={handleSuccess}
+          />
+          <DeleteProgramDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            program={selectedProgram}
+            onConfirm={handleDeleteConfirm}
+          />
+        </>
+      )}
     </div>
   )
 }

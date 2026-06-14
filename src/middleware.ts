@@ -1,44 +1,63 @@
 // src/middleware.ts
-import NextAuth from 'next-auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { getToken } from 'next-auth/jwt'
 import {
   publicRoutes,
   authRoutes,
   apiAuthPrefix,
-  apiV1AuthPrefix, // ← add this
+  apiV1AuthPrefix,
   DEFAULT_LOGIN_REDIRECT,
 } from '@/lib/auth-config'
 
-const { auth } = NextAuth({
-  providers: [],
-  session: { strategy: 'jwt' },
-  secret: process.env.NEXTAUTH_SECRET,
-})
-
-export default auth((req) => {
+export default async function middleware(req: NextRequest) {
   const { nextUrl } = req
-  const isLoggedIn = !!req.auth?.user
 
-  // ✅ Never block NextAuth or your own v1 auth API routes
+  // Never block API routes
   if (
     nextUrl.pathname.startsWith(apiAuthPrefix) ||
-    nextUrl.pathname.startsWith(apiV1AuthPrefix)
-  )
-    return
-
-  if (authRoutes.some((r) => nextUrl.pathname.startsWith(r))) {
-    if (isLoggedIn)
-      return Response.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl))
-    return
+    nextUrl.pathname.startsWith(apiV1AuthPrefix) ||
+    nextUrl.pathname.startsWith('/api/')
+  ) {
+    return NextResponse.next()
   }
 
-  if (publicRoutes.includes(nextUrl.pathname)) return
+  // Read the JWT token directly — works reliably with NextAuth v5 App Router
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    // NextAuth v5 uses a different cookie name by default
+    cookieName:
+      process.env.NODE_ENV === 'production'
+        ? '__Secure-authjs.session-token'
+        : 'authjs.session-token',
+  })
 
+  const isLoggedIn = !!token?.id
+
+  // Auth pages — redirect logged-in users to dashboard
+  if (authRoutes.some((r) => nextUrl.pathname.startsWith(r))) {
+    if (isLoggedIn) {
+      return NextResponse.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl))
+    }
+    return NextResponse.next()
+  }
+
+  // Public routes — always allow
+  if (publicRoutes.includes(nextUrl.pathname)) {
+    return NextResponse.next()
+  }
+
+  // Protected routes — require login
   if (!isLoggedIn) {
     const loginUrl = new URL('/login', nextUrl)
-    loginUrl.searchParams.set('callbackUrl', nextUrl.pathname)
-    return Response.redirect(loginUrl)
+    if (nextUrl.pathname !== '/') {
+      loginUrl.searchParams.set('callbackUrl', nextUrl.pathname)
+    }
+    return NextResponse.redirect(loginUrl)
   }
-})
+
+  return NextResponse.next()
+}
 
 export const config = {
   matcher: [

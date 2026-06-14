@@ -21,7 +21,6 @@ function groupLabel(range: string, date: Date): string {
   if (range === '90d') {
     return date.toLocaleString('default', { month: 'short', year: '2-digit' })
   }
-  // Week label e.g. "Mar 10"
   return date.toLocaleString('default', { month: 'short', day: 'numeric' })
 }
 
@@ -33,7 +32,6 @@ function buildWeekBuckets(
   const now = new Date()
 
   if (range === '90d') {
-    // Monthly buckets
     const cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
     while (cursor <= now) {
       const start = new Date(cursor)
@@ -49,7 +47,6 @@ function buildWeekBuckets(
       cursor.setMonth(cursor.getMonth() + 1)
     }
   } else {
-    // Weekly buckets (7-day chunks)
     const cursor = new Date(rangeStart)
     while (cursor <= now) {
       const start = new Date(cursor)
@@ -82,14 +79,22 @@ export const GET = withErrorHandler(async (req) => {
 
   await connectToDatabase()
   const uid = new Types.ObjectId(session.user.id)
+  const isAdmin = session.user.isAdmin || session.user.isSuperAdmin
   const rangeStart = getRangeStart(range)
   const buckets = buildWeekBuckets(rangeStart, range)
 
+  // Admins see data for items they created
+  // Regular users see data for items assigned to them
+  const baseTaskFilter = isAdmin
+    ? { createdBy: uid, createdAt: { $gte: rangeStart } }
+    : { assignedTo: uid, createdAt: { $gte: rangeStart } }
+
+  const baseMeetingFilter = isAdmin
+    ? { createdBy: uid, createdAt: { $gte: rangeStart } }
+    : { assignedTo: uid, createdAt: { $gte: rangeStart } }
+
   // ── Task completion ────────────────────────────────────────────────────────
-  const allTasks = await Task.find({
-    createdBy: uid,
-    createdAt: { $gte: rangeStart },
-  })
+  const allTasks = await Task.find(baseTaskFilter)
     .select('status createdAt')
     .lean()
 
@@ -106,10 +111,7 @@ export const GET = withErrorHandler(async (req) => {
   })
 
   // ── Meeting frequency ──────────────────────────────────────────────────────
-  const allMeetings = await Meeting.find({
-    createdBy: uid,
-    createdAt: { $gte: rangeStart },
-  })
+  const allMeetings = await Meeting.find(baseMeetingFilter)
     .select('priority createdAt')
     .lean()
 
@@ -125,9 +127,11 @@ export const GET = withErrorHandler(async (req) => {
     }
   })
 
-  // ── Program summary (overall counts by status) ─────────────────────────────
+  // ── Program summary ────────────────────────────────────────────────────────
+  const programMatchStage = isAdmin ? { createdBy: uid } : { assignedTo: uid }
+
   const programCounts = await Program.aggregate([
-    { $match: { createdBy: uid } },
+    { $match: programMatchStage },
     { $group: { _id: '$status', count: { $sum: 1 } } },
   ])
   const programSummary = ['upcoming', 'active', 'completed', 'cancelled'].map(
@@ -138,10 +142,7 @@ export const GET = withErrorHandler(async (req) => {
   )
 
   // ── Overdue trend ──────────────────────────────────────────────────────────
-  const allTasksForTrend = await Task.find({
-    createdBy: uid,
-    createdAt: { $gte: rangeStart },
-  })
+  const allTasksForTrend = await Task.find(baseTaskFilter)
     .select('status dueDate createdAt')
     .lean()
 

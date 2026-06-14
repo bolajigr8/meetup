@@ -1,4 +1,5 @@
 // src/types/index.ts
+
 export type Provider = 'credentials' | 'google'
 
 export interface LinkedProvider {
@@ -24,6 +25,7 @@ export type ReminderInterval = (typeof ENTITY_REMINDER_INTERVALS)[number]
 
 export type EntityType = 'meeting' | 'task' | 'program'
 
+// SessionUser mirrors the next-auth Session user shape
 export interface SessionUser {
   id: string
   email: string
@@ -31,10 +33,4 @@ export interface SessionUser {
   image?: string | null
   isAdmin: boolean
   isSuperAdmin: boolean
-}
-
-declare module 'next-auth' {
-  interface Session {
-    user: SessionUser
-  }
 }

@@ -9,7 +9,6 @@ export const authRoutes = [
   '/link-account',
 ]
 
-// ✅ Add your v1 auth routes so middleware never blocks them
 export const apiAuthPrefix = '/api/auth'
 export const apiV1AuthPrefix = '/api/v1/auth'
 
