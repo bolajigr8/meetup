@@ -1,3 +1,4 @@
+// src/lib/mailer.ts
 import { Resend } from 'resend'
 
 const resend = new Resend(
@@ -8,69 +9,170 @@ const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ?? 'MeetUp <noreply@yourdomain.com>'
 const BASE_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
 
-// ─── Shared template wrapper ──────────────────────────────────────────────────
+// ─── Design tokens ────────────────────────────────────────────────────────────
 
-function htmlWrapper(content: string): string {
-  return `
-<!DOCTYPE html>
-<html lang="en">
+const COLORS = {
+  brand: '#1a56db',
+  brandDark: '#1e429f',
+  brandLight: '#ebf5ff',
+  amber: '#d97706',
+  amberLight: '#fffbeb',
+  teal: '#0d9488',
+  tealLight: '#f0fdfa',
+  red: '#dc2626',
+  redLight: '#fef2f2',
+  green: '#059669',
+  greenLight: '#ecfdf5',
+  text: '#111928',
+  textMuted: '#6b7280',
+  textLight: '#9ca3af',
+  border: '#e5e7eb',
+  surface: '#f9fafb',
+  white: '#ffffff',
+}
+
+// ─── Base layout ──────────────────────────────────────────────────────────────
+
+function layout(content: string, previewText: string = ''): string {
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="x-apple-disable-message-reformatting" />
   <title>MeetUp</title>
+  ${previewText ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${previewText}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>` : ''}
 </head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:'Inter',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 0;">
+<body style="margin:0;padding:0;background-color:${COLORS.surface};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+
+  <!-- Outer wrapper -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+    style="background-color:${COLORS.surface};padding:40px 16px;">
     <tr>
       <td align="center">
-        <table width="520" cellpadding="0" cellspacing="0"
-          style="background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
+
+        <!-- Container -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+          style="max-width:580px;width:100%;">
+
+          <!-- Logo bar -->
           <tr>
-            <td style="background:#2563eb;padding:24px 32px;">
-              <span style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
-                Meet<span style="color:#bfdbfe;">Up</span>
-              </span>
+            <td style="padding-bottom:24px;" align="center">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background-color:${COLORS.brand};border-radius:10px;width:36px;height:36px;text-align:center;vertical-align:middle;">
+                    <span style="color:${COLORS.white};font-size:18px;font-weight:700;line-height:36px;display:inline-block;width:36px;">M</span>
+                  </td>
+                  <td style="padding-left:10px;vertical-align:middle;">
+                    <span style="font-size:20px;font-weight:700;color:${COLORS.text};letter-spacing:-0.3px;">
+                      Meet<span style="color:${COLORS.brand};">Up</span>
+                    </span>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
+
+          <!-- Card -->
           <tr>
-            <td style="padding:32px;">
+            <td style="background-color:${COLORS.white};border-radius:16px;border:1px solid ${COLORS.border};overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+
               ${content}
+
+              <!-- Footer inside card -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding:20px 32px;border-top:1px solid ${COLORS.border};background-color:${COLORS.surface};">
+                    <p style="margin:0;font-size:12px;color:${COLORS.textLight};text-align:center;line-height:1.6;">
+                      This email was sent by MeetUp on behalf of your organisation.<br />
+                      All times are in <strong>West Africa Time (WAT, UTC+1)</strong>.<br />
+                      If you believe you received this in error, please disregard it.
+                    </p>
+                    <p style="margin:12px 0 0;font-size:11px;color:${COLORS.textLight};text-align:center;">
+                      © ${new Date().getFullYear()} MeetUp &nbsp;·&nbsp; Powered by MeetUp Platform
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
             </td>
           </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>`
+}
+
+// ─── Shared blocks ────────────────────────────────────────────────────────────
+
+function heroStripe(
+  accentColor: string,
+  iconChar: string,
+  label: string,
+): string {
+  return `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td style="background-color:${accentColor};padding:28px 32px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
           <tr>
-            <td style="padding:20px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
-              <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">
-                © ${new Date().getFullYear()} MeetUp · All times in West Africa Time (WAT, UTC+1)
-                <br />If you didn't expect this email, you can safely ignore it.
-              </p>
+            <td style="background-color:rgba(255,255,255,0.18);border-radius:8px;width:40px;height:40px;text-align:center;vertical-align:middle;">
+              <span style="font-size:20px;line-height:40px;display:inline-block;">${iconChar}</span>
+            </td>
+            <td style="padding-left:14px;vertical-align:middle;">
+              <p style="margin:0;font-size:11px;font-weight:600;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px;">${label}</p>
             </td>
           </tr>
         </table>
       </td>
     </tr>
-  </table>
-</body>
-</html>`
+  </table>`
 }
 
-function ctaButton(text: string, url: string): string {
-  return `
-<a href="${url}" target="_blank"
-  style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 24px;
-         border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;
-         margin:20px 0;">
-  ${text}
-</a>`
+function badge(text: string, bg: string, color: string): string {
+  return `<span style="display:inline-block;background-color:${bg};color:${color};font-size:11px;font-weight:700;padding:4px 12px;border-radius:100px;letter-spacing:0.5px;text-transform:uppercase;">${text}</span>`
 }
 
-function infoPill(label: string, value: string): string {
+function detailRow(icon: string, label: string, value: string): string {
   return `
-<tr>
-  <td style="padding:6px 0;">
-    <span style="font-size:13px;color:#64748b;font-weight:500;">${label}:</span>
-    <span style="font-size:13px;color:#0f172a;margin-left:6px;">${value}</span>
-  </td>
-</tr>`
+  <tr>
+    <td style="padding:10px 0;border-bottom:1px solid ${COLORS.border};">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr>
+          <td style="width:28px;vertical-align:top;padding-top:1px;">
+            <span style="font-size:15px;">${icon}</span>
+          </td>
+          <td style="vertical-align:top;">
+            <p style="margin:0;font-size:11px;font-weight:600;color:${COLORS.textMuted};text-transform:uppercase;letter-spacing:0.5px;">${label}</p>
+            <p style="margin:3px 0 0;font-size:14px;color:${COLORS.text};font-weight:500;line-height:1.4;">${value}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>`
+}
+
+function ctaButton(text: string, url: string, color: string): string {
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td style="border-radius:8px;background-color:${color};">
+        <a href="${url}" target="_blank"
+          style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;color:${COLORS.white};text-decoration:none;border-radius:8px;letter-spacing:0.2px;">
+          ${text} &rarr;
+        </a>
+      </td>
+    </tr>
+  </table>`
+}
+
+function divider(): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding:8px 0;"><div style="height:1px;background-color:${COLORS.border};"></div></td></tr></table>`
 }
 
 // ─── Password Reset ───────────────────────────────────────────────────────────
@@ -81,24 +183,54 @@ export async function sendPasswordResetEmail(
   rawToken: string,
 ): Promise<void> {
   const resetUrl = `${BASE_URL}/reset-password?token=${rawToken}`
+  const firstName = name.split(' ')[0]
+
   await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
     subject: 'Reset your MeetUp password',
-    html: htmlWrapper(`
-      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
-        Reset your password
-      </h2>
-      <p style="margin:0 0 16px;font-size:15px;color:#334155;line-height:1.6;">
-        Hi ${name}, we received a request to reset your password.
-        Click the button below — this link expires in <strong>1 hour</strong>.
-      </p>
-      ${ctaButton('Reset Password', resetUrl)}
-      <p style="margin:16px 0 0;font-size:13px;color:#64748b;">
-        Or copy this link:<br />
-        <span style="color:#2563eb;word-break:break-all;">${resetUrl}</span>
-      </p>
-    `),
+    html: layout(
+      `
+      ${heroStripe(COLORS.brand, '🔐', 'Security Request')}
+
+      <!-- Body -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding:32px 32px 24px;">
+            <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${COLORS.text};letter-spacing:-0.3px;">
+              Password reset request
+            </h1>
+            <p style="margin:0 0 20px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
+              Dear ${firstName},
+            </p>
+            <p style="margin:0 0 20px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
+              We received a request to reset the password associated with your MeetUp account.
+              If you made this request, please click the button below to proceed.
+              This link will expire in <strong style="color:${COLORS.text};">60 minutes</strong>.
+            </p>
+
+            ${ctaButton('Reset My Password', resetUrl, COLORS.brand)}
+
+            <p style="margin:24px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
+              If the button above does not work, copy and paste the following link into your browser:
+            </p>
+            <p style="margin:8px 0 0;font-size:12px;color:${COLORS.brand};word-break:break-all;line-height:1.5;">
+              ${resetUrl}
+            </p>
+
+            ${divider()}
+
+            <p style="margin:16px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
+              <strong style="color:${COLORS.text};">Did not request this?</strong>
+              Your account remains secure. You may safely ignore this email.
+              No changes will be made unless you click the link above.
+            </p>
+          </td>
+        </tr>
+      </table>
+      `,
+      `Reset your MeetUp password — link expires in 60 minutes`,
+    ),
   })
 }
 
@@ -109,24 +241,75 @@ export async function sendWelcomeEmail(
   name: string,
 ): Promise<void> {
   const dashboardUrl = `${BASE_URL}/overview`
+  const firstName = name.split(' ')[0]
+
   await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: 'Welcome to MeetUp 🎉',
-    html: htmlWrapper(`
-      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
-        Welcome to MeetUp, ${name}!
-      </h2>
-      <p style="margin:0 0 16px;font-size:15px;color:#334155;line-height:1.6;">
-        Your account is ready. MeetUp helps you stay on top of meetings, tasks,
-        and training programs — all running on West Africa Time.
-      </p>
-      ${ctaButton('Go to Dashboard', dashboardUrl)}
-      <p style="margin:16px 0 0;font-size:13px;color:#64748b;line-height:1.6;">
-        All reminders and timestamps are shown in
-        <strong>West Africa Time (WAT, UTC+1)</strong>.
-      </p>
-    `),
+    subject: `Welcome to MeetUp, ${firstName}`,
+    html: layout(
+      `
+      ${heroStripe(COLORS.brand, '👋', 'Welcome')}
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding:32px 32px 28px;">
+            <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:${COLORS.text};letter-spacing:-0.3px;">
+              Your account is ready, ${firstName}.
+            </h1>
+            <p style="margin:0 0 16px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
+              Welcome to MeetUp — your organisation's platform for scheduling meetings,
+              managing tasks, and coordinating training programmes, all running on
+              <strong style="color:${COLORS.text};">West Africa Time (WAT)</strong>.
+            </p>
+
+            <!-- Feature highlights -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="background-color:${COLORS.brandLight};border-radius:10px;margin:20px 0 24px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td style="padding:6px 0;">
+                        <span style="font-size:14px;color:${COLORS.brand};">📅</span>
+                        <span style="font-size:14px;color:${COLORS.text};margin-left:10px;font-weight:500;">Schedule and track meetings with your team</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;">
+                        <span style="font-size:14px;color:${COLORS.brand};">✅</span>
+                        <span style="font-size:14px;color:${COLORS.text};margin-left:10px;font-weight:500;">Manage tasks with due dates and priority levels</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;">
+                        <span style="font-size:14px;color:${COLORS.brand};">🎓</span>
+                        <span style="font-size:14px;color:${COLORS.text};margin-left:10px;font-weight:500;">Coordinate training programmes with automated reminders</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;">
+                        <span style="font-size:14px;color:${COLORS.brand};">🔔</span>
+                        <span style="font-size:14px;color:${COLORS.text};margin-left:10px;font-weight:500;">Receive timely email reminders — never miss an event</span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            ${ctaButton('Go to your Dashboard', dashboardUrl, COLORS.brand)}
+
+            <p style="margin:24px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
+              If you have any questions or require assistance, please contact your
+              organisation administrator.
+            </p>
+          </td>
+        </tr>
+      </table>
+      `,
+      `Welcome to MeetUp — your workspace is ready`,
+    ),
   })
 }
 
@@ -141,16 +324,34 @@ type MeetingReminderPayload = {
   description?: string
 }
 
-const REMINDER_LABEL: Record<'1day' | '2hr' | '30min', string> = {
-  '1day': 'tomorrow',
-  '2hr': 'in 2 hours',
-  '30min': 'in 30 minutes',
-}
-
-const REMINDER_BADGE_COLOR: Record<'1day' | '2hr' | '30min', string> = {
-  '1day': '#0369a1',
-  '2hr': '#b45309',
-  '30min': '#b91c1c',
+const MEETING_REMINDER_CONFIG = {
+  '1day': {
+    label: 'Tomorrow',
+    sublabel: 'Your meeting is scheduled for tomorrow',
+    urgency: 'Reminder — 1 Day',
+    accentColor: COLORS.brand,
+    badgeBg: COLORS.brandLight,
+    badgeColor: COLORS.brand,
+    emoji: '📅',
+  },
+  '2hr': {
+    label: 'In 2 Hours',
+    sublabel: 'Your meeting begins in approximately 2 hours',
+    urgency: 'Reminder — 2 Hours',
+    accentColor: COLORS.amber,
+    badgeBg: COLORS.amberLight,
+    badgeColor: COLORS.amber,
+    emoji: '⏰',
+  },
+  '30min': {
+    label: 'In 30 Minutes',
+    sublabel: 'Your meeting is about to begin',
+    urgency: 'Reminder — 30 Minutes',
+    accentColor: '#b91c1c',
+    badgeBg: COLORS.redLight,
+    badgeColor: COLORS.red,
+    emoji: '🔴',
+  },
 }
 
 export async function sendMeetingReminderEmail(
@@ -159,38 +360,69 @@ export async function sendMeetingReminderEmail(
   meeting: MeetingReminderPayload,
   reminderType: '1day' | '2hr' | '30min',
 ): Promise<void> {
-  const label = REMINDER_LABEL[reminderType]
-  const badgeColor = REMINDER_BADGE_COLOR[reminderType]
+  const cfg = MEETING_REMINDER_CONFIG[reminderType]
+  const firstName = name.split(' ')[0]
   const meetingsUrl = `${BASE_URL}/meetings`
+
   await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: `Reminder: "${meeting.title}" is ${label}`,
-    html: htmlWrapper(`
-      <div style="margin-bottom:20px;">
-        <span style="display:inline-block;background:${badgeColor};color:#fff;
-                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;">
-          ${label.toUpperCase()}
-        </span>
-      </div>
-      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
-        Meeting Reminder
-      </h2>
-      <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
-        Hi ${name}, your meeting is coming up <strong>${label}</strong>.
-      </p>
-      <table width="100%" cellpadding="0" cellspacing="0"
-        style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
-        <tbody>
-          ${infoPill('Meeting', meeting.title)}
-          ${infoPill('Date', meeting.date)}
-          ${infoPill('Time', `${meeting.startTime} – ${meeting.endTime} WAT`)}
-          ${meeting.location ? infoPill('Location', meeting.location) : ''}
-          ${meeting.description ? infoPill('Notes', meeting.description) : ''}
-        </tbody>
+    subject: `Meeting Reminder: "${meeting.title}" — ${cfg.label}`,
+    html: layout(
+      `
+      ${heroStripe(cfg.accentColor, cfg.emoji, cfg.urgency)}
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding:32px 32px 0;">
+            ${badge(cfg.label, cfg.badgeBg, cfg.badgeColor)}
+            <h1 style="margin:16px 0 8px;font-size:22px;font-weight:700;color:${COLORS.text};letter-spacing:-0.3px;">
+              Meeting Reminder
+            </h1>
+            <p style="margin:0 0 24px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
+              Dear ${firstName},<br /><br />
+              ${cfg.sublabel}. Please review the details below and ensure you are prepared.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Meeting detail card -->
+        <tr>
+          <td style="padding:0 32px 24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;">
+              <tr>
+                <td style="background-color:${COLORS.surface};padding:16px 20px;">
+                  <p style="margin:0;font-size:11px;font-weight:700;color:${COLORS.textMuted};text-transform:uppercase;letter-spacing:1px;">Meeting Details</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:4px 20px 16px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    ${detailRow('📌', 'Meeting', meeting.title)}
+                    ${detailRow('📆', 'Date', meeting.date)}
+                    ${detailRow('🕐', 'Time', `${meeting.startTime} – ${meeting.endTime} WAT`)}
+                    ${meeting.location ? detailRow('📍', 'Location', meeting.location) : ''}
+                    ${meeting.description ? detailRow('📝', 'Notes', meeting.description) : ''}
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:0 32px 32px;">
+            ${ctaButton('View Meeting Details', meetingsUrl, cfg.accentColor)}
+            <p style="margin:20px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
+              This is an automated reminder from MeetUp. Please do not reply to this email.
+            </p>
+          </td>
+        </tr>
       </table>
-      ${ctaButton('View Meeting', meetingsUrl)}
-    `),
+      `,
+      `${cfg.sublabel}: ${meeting.title} on ${meeting.date}`,
+    ),
   })
 }
 
@@ -203,40 +435,98 @@ type TaskReminderPayload = {
   description?: string
 }
 
+const PRIORITY_CONFIG: Record<
+  string,
+  { label: string; bg: string; color: string }
+> = {
+  high: { label: 'High Priority', bg: COLORS.redLight, color: COLORS.red },
+  medium: {
+    label: 'Medium Priority',
+    bg: COLORS.amberLight,
+    color: COLORS.amber,
+  },
+  low: {
+    label: 'Low Priority',
+    bg: COLORS.greenLight,
+    color: COLORS.green,
+  },
+}
+
 export async function sendTaskReminderEmail(
   email: string,
   name: string,
   task: TaskReminderPayload,
 ): Promise<void> {
   const tasksUrl = `${BASE_URL}/tasks`
+  const firstName = name.split(' ')[0]
+  const priorityCfg = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.medium
+
   await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: `Task due tomorrow: "${task.title}"`,
-    html: htmlWrapper(`
-      <div style="margin-bottom:20px;">
-        <span style="display:inline-block;background:#0369a1;color:#fff;
-                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;">
-          DUE TOMORROW
-        </span>
-      </div>
-      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
-        Task Due Tomorrow
-      </h2>
-      <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
-        Hi ${name}, this task is due tomorrow — make sure it's completed on time.
-      </p>
-      <table width="100%" cellpadding="0" cellspacing="0"
-        style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
-        <tbody>
-          ${infoPill('Task', task.title)}
-          ${infoPill('Due Date', task.dueDate)}
-          ${infoPill('Priority', task.priority.charAt(0).toUpperCase() + task.priority.slice(1))}
-          ${task.description ? infoPill('Notes', task.description) : ''}
-        </tbody>
+    subject: `Task Due Tomorrow: "${task.title}"`,
+    html: layout(
+      `
+      ${heroStripe(COLORS.amber, '✅', 'Task Reminder')}
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding:32px 32px 0;">
+            ${badge('Due Tomorrow', COLORS.amberLight, COLORS.amber)}
+            <h1 style="margin:16px 0 8px;font-size:22px;font-weight:700;color:${COLORS.text};letter-spacing:-0.3px;">
+              Task Due Tomorrow
+            </h1>
+            <p style="margin:0 0 24px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
+              Dear ${firstName},<br /><br />
+              This is a reminder that the following task is due tomorrow.
+              Please ensure it is completed on time to avoid it being marked as overdue.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Task detail card -->
+        <tr>
+          <td style="padding:0 32px 24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;">
+              <tr>
+                <td style="background-color:${COLORS.surface};padding:16px 20px;">
+                  <p style="margin:0;font-size:11px;font-weight:700;color:${COLORS.textMuted};text-transform:uppercase;letter-spacing:1px;">Task Details</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:4px 20px 16px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    ${detailRow('📌', 'Task', task.title)}
+                    ${detailRow('📆', 'Due Date', task.dueDate)}
+                    ${detailRow('🏷️', 'Priority', priorityCfg.label)}
+                    ${task.description ? detailRow('📝', 'Notes', task.description) : ''}
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;background-color:${priorityCfg.bg};border-top:1px solid ${COLORS.border};">
+                  <p style="margin:0;font-size:13px;font-weight:600;color:${priorityCfg.color};">
+                    ${priorityCfg.label} — Please action this before the deadline.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:0 32px 32px;">
+            ${ctaButton('View Task', tasksUrl, COLORS.amber)}
+            <p style="margin:20px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
+              This is an automated reminder from MeetUp. Please do not reply to this email.
+            </p>
+          </td>
+        </tr>
       </table>
-      ${ctaButton('View Tasks', tasksUrl)}
-    `),
+      `,
+      `Task due tomorrow: ${task.title}`,
+    ),
   })
 }
 
@@ -256,34 +546,79 @@ export async function sendProgramReminderEmail(
   program: ProgramReminderPayload,
 ): Promise<void> {
   const programsUrl = `${BASE_URL}/programs`
+  const firstName = name.split(' ')[0]
+  const scheduleLabel =
+    program.scheduleType === 'intensive'
+      ? '⚡ Intensive Programme'
+      : '📅 Standard Programme'
+
   await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: `Program starting tomorrow: "${program.title}"`,
-    html: htmlWrapper(`
-      <div style="margin-bottom:20px;">
-        <span style="display:inline-block;background:#0369a1;color:#fff;
-                     font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;">
-          STARTS TOMORROW
-        </span>
-      </div>
-      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">
-        Program Starting Tomorrow
-      </h2>
-      <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
-        Hi ${name}, your program begins tomorrow. Make sure participants are ready.
-      </p>
-      <table width="100%" cellpadding="0" cellspacing="0"
-        style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
-        <tbody>
-          ${infoPill('Program', program.title)}
-          ${infoPill('Start Date', program.startDate)}
-          ${infoPill('End Date', program.endDate)}
-          ${infoPill('Schedule', program.scheduleType.charAt(0).toUpperCase() + program.scheduleType.slice(1))}
-          ${program.description ? infoPill('Notes', program.description) : ''}
-        </tbody>
+    subject: `Programme Starting Tomorrow: "${program.title}"`,
+    html: layout(
+      `
+      ${heroStripe(COLORS.teal, '🎓', 'Programme Reminder')}
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding:32px 32px 0;">
+            ${badge('Starts Tomorrow', COLORS.tealLight, COLORS.teal)}
+            <h1 style="margin:16px 0 8px;font-size:22px;font-weight:700;color:${COLORS.text};letter-spacing:-0.3px;">
+              Training Programme Starting Tomorrow
+            </h1>
+            <p style="margin:0 0 24px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
+              Dear ${firstName},<br /><br />
+              This is an advance notice that the following training programme
+              is scheduled to commence tomorrow. Please ensure all participants
+              are informed and prepared accordingly.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Programme detail card -->
+        <tr>
+          <td style="padding:0 32px 24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="border:1px solid ${COLORS.border};border-radius:10px;overflow:hidden;">
+              <tr>
+                <td style="background-color:${COLORS.surface};padding:16px 20px;">
+                  <p style="margin:0;font-size:11px;font-weight:700;color:${COLORS.textMuted};text-transform:uppercase;letter-spacing:1px;">Programme Details</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:4px 20px 16px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    ${detailRow('📌', 'Programme', program.title)}
+                    ${detailRow('🟢', 'Start Date', program.startDate)}
+                    ${detailRow('🔴', 'End Date', program.endDate)}
+                    ${detailRow('📋', 'Schedule Type', scheduleLabel)}
+                    ${program.description ? detailRow('📝', 'Notes', program.description) : ''}
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;background-color:${COLORS.tealLight};border-top:1px solid ${COLORS.border};">
+                  <p style="margin:0;font-size:13px;font-weight:600;color:${COLORS.teal};">
+                    Please confirm that all participants are aware and ready to begin.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:0 32px 32px;">
+            ${ctaButton('View Programme Details', programsUrl, COLORS.teal)}
+            <p style="margin:20px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
+              This is an automated reminder from MeetUp. Please do not reply to this email.
+            </p>
+          </td>
+        </tr>
       </table>
-      ${ctaButton('View Programs', programsUrl)}
-    `),
+      `,
+      `Programme starting tomorrow: ${program.title}`,
+    ),
   })
 }
