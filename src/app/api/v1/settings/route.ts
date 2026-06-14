@@ -1,5 +1,4 @@
-// route: GET /api/v1/settings  |  PATCH /api/v1/settings
-
+// src/app/api/v1/settings/route.ts
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
@@ -9,13 +8,13 @@ import User from '@/models/User'
 import UserSettings from '@/models/UserSettings'
 
 const updateProfileSchema = z.object({
+  // Email deliberately excluded — cannot be changed via this endpoint
   name: z
     .string()
     .min(2, 'Name must be at least 2 characters')
     .max(80)
     .trim()
     .optional(),
-  email: z.string().email('Enter a valid email').optional(),
   notificationPrefs: z
     .object({
       meetingReminder2Days: z.boolean().optional(),
@@ -90,14 +89,14 @@ export const PATCH = withErrorHandler(async (req) => {
   const uid = session.user.id
 
   const { notificationPrefs, ...profileFields } = parsed.data
-
   const updates: Promise<unknown>[] = []
 
-  if (Object.keys(profileFields).length > 0) {
+  // Only update name — email is intentionally excluded from schema
+  if (profileFields.name) {
     updates.push(
       User.findByIdAndUpdate(
         uid,
-        { $set: profileFields },
+        { $set: { name: profileFields.name } },
         { new: true, runValidators: true },
       ),
     )

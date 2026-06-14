@@ -1,3 +1,4 @@
+// src/components/settings/Profileform.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -14,7 +15,6 @@ interface ProfileData {
 
 interface FieldErrors {
   name?: string
-  email?: string
 }
 
 export default function ProfileForm() {
@@ -33,23 +33,11 @@ export default function ProfileForm() {
       .finally(() => setFetching(false))
   }, [])
 
-  const set = (field: keyof ProfileData, value: string) => {
-    setForm((f) => ({ ...f, [field]: value }))
-    if (errors[field])
-      setErrors((e) => {
-        const n = { ...e }
-        delete n[field]
-        return n
-      })
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const errs: FieldErrors = {}
     if (!form.name.trim() || form.name.trim().length < 2)
       errs.name = 'Name must be at least 2 characters'
-    if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      errs.email = 'Enter a valid email'
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
       return
@@ -60,10 +48,8 @@ export default function ProfileForm() {
       const res = await fetch('/api/v1/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          email: form.email.trim(),
-        }),
+        // Only send name — email is display-only and not editable
+        body: JSON.stringify({ name: form.name.trim() }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -80,7 +66,7 @@ export default function ProfileForm() {
       toast.success('Profile updated', {
         description: (
           <span style={{ color: '#000000', fontSize: '0.8125rem' }}>
-            Your changes have been saved.
+            Your name has been saved.
           </span>
         ),
       })
@@ -116,24 +102,56 @@ export default function ProfileForm() {
       noValidate
       className='flex flex-col gap-4 max-w-md'
     >
-      <Field label='Full name' required error={errors.name}>
+      {/* Name — editable */}
+      <div className='flex flex-col gap-1.5'>
+        <Label
+          className='text-sm font-medium'
+          style={{ color: 'var(--of-heading)' }}
+        >
+          Full name <span className='ml-0.5 text-red-500'>*</span>
+        </Label>
         <Input
           value={form.name}
-          onChange={(e) => set('name', e.target.value)}
+          onChange={(e) => {
+            setForm((f) => ({ ...f, name: e.target.value }))
+            if (errors.name) setErrors({})
+          }}
           placeholder='Your full name'
           className={errors.name ? 'border-red-400' : ''}
         />
-      </Field>
+        {errors.name && (
+          <p
+            className='text-xs flex items-center gap-1'
+            style={{ color: '#dc2626' }}
+          >
+            <span>⚠</span> {errors.name}
+          </p>
+        )}
+      </div>
 
-      <Field label='Email address' required error={errors.email}>
+      {/* Email — read-only display only */}
+      <div className='flex flex-col gap-1.5'>
+        <Label
+          className='text-sm font-medium'
+          style={{ color: 'var(--of-heading)' }}
+        >
+          Email address
+        </Label>
         <Input
           type='email'
           value={form.email}
-          onChange={(e) => set('email', e.target.value)}
-          placeholder='you@company.com'
-          className={errors.email ? 'border-red-400' : ''}
+          readOnly
+          className='cursor-default'
+          style={{
+            background: 'var(--of-surface)',
+            color: 'var(--of-muted)',
+          }}
         />
-      </Field>
+        <p className='text-xs' style={{ color: 'var(--of-muted)' }}>
+          Your email address cannot be changed. Contact support if you need
+          help.
+        </p>
+      </div>
 
       <div className='pt-1'>
         <Button
@@ -147,38 +165,5 @@ export default function ProfileForm() {
         </Button>
       </div>
     </form>
-  )
-}
-
-function Field({
-  label,
-  required,
-  error,
-  children,
-}: {
-  label: string
-  required?: boolean
-  error?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className='flex flex-col gap-1.5'>
-      <Label
-        className='text-sm font-medium'
-        style={{ color: 'var(--of-heading)' }}
-      >
-        {label}
-        {required && <span className='ml-0.5 text-red-500'>*</span>}
-      </Label>
-      {children}
-      {error && (
-        <p
-          className='text-xs flex items-center gap-1'
-          style={{ color: '#dc2626' }}
-        >
-          <span>⚠</span> {error}
-        </p>
-      )}
-    </div>
   )
 }
