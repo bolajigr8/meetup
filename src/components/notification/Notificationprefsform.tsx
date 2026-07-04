@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import PushNotificationToggle from '@/components/settings/PushNotificationToggle'
 
 interface NotifPrefs {
   meetingReminder2Days: boolean
@@ -133,6 +134,16 @@ export default function NotificationPrefsForm() {
 
   return (
     <div className='flex flex-col gap-6 max-w-lg'>
+      <div>
+        <p
+          className='text-xs font-semibold uppercase tracking-widest mb-2'
+          style={{ color: 'var(--of-blue)' }}
+        >
+          Push
+        </p>
+        <PushNotificationToggle />
+      </div>
+
       {PREF_GROUPS.map(({ group, color, items }) => (
         <div key={group}>
           <p
@@ -165,7 +176,6 @@ export default function NotificationPrefsForm() {
                     {desc}
                   </p>
                 </div>
-                {/* Toggle switch */}
                 <div
                   className='relative w-10 h-5.5 rounded-full transition-colors duration-200 shrink-0 ml-4'
                   style={{

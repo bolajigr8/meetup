@@ -6,7 +6,7 @@ const resend = new Resend(
 )
 
 const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL ?? 'MeetUp <noreply@yourdomain.com>'
+  process.env.RESEND_FROM_EMAIL ?? 'Gablink <noreply@yourdomain.com>'
 const BASE_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ function layout(content: string, previewText: string = ''): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="x-apple-disable-message-reformatting" />
-  <title>MeetUp</title>
+  <title>Gablink</title>
   ${previewText ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${previewText}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>` : ''}
 </head>
 <body style="margin:0;padding:0;background-color:${COLORS.surface};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
@@ -62,11 +62,12 @@ function layout(content: string, previewText: string = ''): string {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="background-color:${COLORS.brand};border-radius:10px;width:36px;height:36px;text-align:center;vertical-align:middle;">
-                    <span style="color:${COLORS.white};font-size:18px;font-weight:700;line-height:36px;display:inline-block;width:36px;">M</span>
+                                       <span style="color:${COLORS.white};font-size:18px;font-weight:700;line-height:36px;display:inline-block;width:36px;">G</span>
+
                   </td>
-                  <td style="padding-left:10px;vertical-align:middle;">
+                   <td style="padding-left:10px;vertical-align:middle;">
                     <span style="font-size:20px;font-weight:700;color:${COLORS.text};letter-spacing:-0.3px;">
-                      Meet<span style="color:${COLORS.brand};">Up</span>
+                      Gab<span style="color:${COLORS.brand};">link</span>
                     </span>
                   </td>
                 </tr>
@@ -85,12 +86,12 @@ function layout(content: string, previewText: string = ''): string {
                 <tr>
                   <td style="padding:20px 32px;border-top:1px solid ${COLORS.border};background-color:${COLORS.surface};">
                     <p style="margin:0;font-size:12px;color:${COLORS.textLight};text-align:center;line-height:1.6;">
-                      This email was sent by MeetUp on behalf of your organisation.<br />
+                      This email was sent by Gablink on behalf of your organisation.<br />
                       All times are in <strong>West Africa Time (WAT, UTC+1)</strong>.<br />
                       If you believe you received this in error, please disregard it.
                     </p>
                     <p style="margin:12px 0 0;font-size:11px;color:${COLORS.textLight};text-align:center;">
-                      © ${new Date().getFullYear()} MeetUp &nbsp;·&nbsp; Powered by MeetUp Platform
+                      © ${new Date().getFullYear()} Gablink &nbsp;·&nbsp; Powered by Gablink Platform
                     </p>
                   </td>
                 </tr>
@@ -188,7 +189,7 @@ export async function sendPasswordResetEmail(
   await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: 'Reset your MeetUp password',
+    subject: 'Reset your Gablink password',
     html: layout(
       `
       ${heroStripe(COLORS.brand, '🔐', 'Security Request')}
@@ -204,7 +205,7 @@ export async function sendPasswordResetEmail(
               Dear ${firstName},
             </p>
             <p style="margin:0 0 20px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
-              We received a request to reset the password associated with your MeetUp account.
+              We received a request to reset the password associated with your Gablink account.
               If you made this request, please click the button below to proceed.
               This link will expire in <strong style="color:${COLORS.text};">60 minutes</strong>.
             </p>
@@ -229,7 +230,7 @@ export async function sendPasswordResetEmail(
         </tr>
       </table>
       `,
-      `Reset your MeetUp password — link expires in 60 minutes`,
+      `Reset your Gablink password — link expires in 60 minutes`,
     ),
   })
 }
@@ -246,7 +247,7 @@ export async function sendWelcomeEmail(
   await resend.emails.send({
     from: FROM_EMAIL,
     to: email,
-    subject: `Welcome to MeetUp, ${firstName}`,
+    subject: `Welcome to Gablink, ${firstName}`,
     html: layout(
       `
       ${heroStripe(COLORS.brand, '👋', 'Welcome')}
@@ -258,7 +259,7 @@ export async function sendWelcomeEmail(
               Your account is ready, ${firstName}.
             </h1>
             <p style="margin:0 0 16px;font-size:15px;color:${COLORS.textMuted};line-height:1.7;">
-              Welcome to MeetUp — your organisation's platform for scheduling meetings,
+              Welcome to Gablink — your organisation's platform for scheduling meetings,
               managing tasks, and coordinating training programmes, all running on
               <strong style="color:${COLORS.text};">West Africa Time (WAT)</strong>.
             </p>
@@ -308,7 +309,7 @@ export async function sendWelcomeEmail(
         </tr>
       </table>
       `,
-      `Welcome to MeetUp — your workspace is ready`,
+      `Welcome to Gablink — your workspace is ready`,
     ),
   })
 }
@@ -415,7 +416,7 @@ export async function sendMeetingReminderEmail(
           <td style="padding:0 32px 32px;">
             ${ctaButton('View Meeting Details', meetingsUrl, cfg.accentColor)}
             <p style="margin:20px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
-              This is an automated reminder from MeetUp. Please do not reply to this email.
+              This is an automated reminder from Gablink. Please do not reply to this email.
             </p>
           </td>
         </tr>
@@ -519,7 +520,7 @@ export async function sendTaskReminderEmail(
           <td style="padding:0 32px 32px;">
             ${ctaButton('View Task', tasksUrl, COLORS.amber)}
             <p style="margin:20px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
-              This is an automated reminder from MeetUp. Please do not reply to this email.
+              This is an automated reminder from Gablink. Please do not reply to this email.
             </p>
           </td>
         </tr>
@@ -612,7 +613,7 @@ export async function sendProgramReminderEmail(
           <td style="padding:0 32px 32px;">
             ${ctaButton('View Programme Details', programsUrl, COLORS.teal)}
             <p style="margin:20px 0 0;font-size:13px;color:${COLORS.textMuted};line-height:1.6;">
-              This is an automated reminder from MeetUp. Please do not reply to this email.
+              This is an automated reminder from Gablink. Please do not reply to this email.
             </p>
           </td>
         </tr>

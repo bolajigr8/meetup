@@ -1,9 +1,8 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans, Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import Providers from './providers'
-import Navbar from '@/components/General/navbar'
-import Footer from '@/components/General/footer'
+
 import { Toaster } from '@/components/ui/sonner'
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -28,9 +27,30 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'MeetUp — Schedule smarter',
+  title: 'Gablink — Schedule smarter',
   description:
     'Meetings, tasks, and training programs in one place — with automated reminders on West Africa Time.',
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Gablink',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#1a56db',
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({

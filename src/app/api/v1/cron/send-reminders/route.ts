@@ -7,6 +7,7 @@ import {
   sendTaskReminderEmail,
   sendProgramReminderEmail,
 } from '@/lib/mailer'
+import { sendPushToUser } from '@/lib/push'
 import Meeting from '@/models/Meeting'
 import Task from '@/models/Task'
 import Program from '@/models/Program'
@@ -79,6 +80,46 @@ async function resolveRecipients(
   return recipients
 }
 
+// ─── Push helper ──────────────────────────────────────────────────────────────
+// Fires push to every registered-user id in parallel with email, per entity.
+// Failures are logged but NEVER block or roll back the email path above/below it.
+async function pushToAssignedUsers(
+  assignedIds: string[],
+  payload: {
+    title: string
+    body: string
+    tag: string
+    url?: string
+    entityId: string
+    entityType: 'meeting' | 'task' | 'program'
+    priority?: 'low' | 'medium' | 'high'
+  },
+  errorsSink: string[],
+): Promise<{ sent: number; failed: number }> {
+  let sent = 0
+  let failed = 0
+  await Promise.all(
+    assignedIds.map(async (uid) => {
+      try {
+        const result = await sendPushToUser(uid, payload)
+        sent += result.sent
+        failed += result.failed
+        if (result.errors.length) errorsSink.push(...result.errors)
+      } catch (err) {
+        // sendPushToUser is designed to never throw, but guard anyway —
+        // a push failure must never propagate up and affect email sending.
+        failed++
+        errorsSink.push(
+          `Push to user ${uid} for ${payload.entityType} ${payload.entityId}: ${
+            (err as Error).message
+          }`,
+        )
+      }
+    }),
+  )
+  return { sent, failed }
+}
+
 // ─── Status updater ───────────────────────────────────────────────────────────
 
 async function updateExpiredStatuses(
@@ -99,8 +140,6 @@ async function updateExpiredStatuses(
     programsCompleted: 0,
   }
 
-  // ── Meetings: upcoming → ongoing → completed ───────────────────────────────
-  // Find all upcoming/ongoing meetings — we'll check each one
   const activeMeetings = await Meeting.find({
     status: { $in: ['upcoming', 'ongoing'] },
   })
@@ -112,13 +151,11 @@ async function updateExpiredStatuses(
     const endUTC = watToUTC(meeting.date, meeting.endTime)
 
     if (nowUTC >= endUTC) {
-      // Meeting has ended — mark completed
       await Meeting.findByIdAndUpdate(meeting._id, {
         $set: { status: 'completed' },
       })
       stats.meetingsCompleted++
     } else if (nowUTC >= startUTC && meeting.status === 'upcoming') {
-      // Meeting has started but not ended — mark ongoing
       await Meeting.findByIdAndUpdate(meeting._id, {
         $set: { status: 'ongoing' },
       })
@@ -126,7 +163,6 @@ async function updateExpiredStatuses(
     }
   }
 
-  // ── Tasks: todo/in_progress → overdue if past due date ────────────────────
   const overdueTasks = await Task.updateMany(
     {
       status: { $in: ['todo', 'in_progress'] },
@@ -136,23 +172,14 @@ async function updateExpiredStatuses(
   )
   stats.tasksOverdue = overdueTasks.modifiedCount
 
-  // ── Programs: upcoming → active → completed ────────────────────────────────
-  // Activate programs whose startDate is today or earlier
   const activatedPrograms = await Program.updateMany(
-    {
-      status: 'upcoming',
-      startDate: { $lte: todayStr },
-    },
+    { status: 'upcoming', startDate: { $lte: todayStr } },
     { $set: { status: 'active' } },
   )
   stats.programsActivated = activatedPrograms.modifiedCount
 
-  // Complete programs whose endDate is before today
   const completedPrograms = await Program.updateMany(
-    {
-      status: { $in: ['upcoming', 'active'] },
-      endDate: { $lt: todayStr },
-    },
+    { status: { $in: ['upcoming', 'active'] }, endDate: { $lt: todayStr } },
     { $set: { status: 'completed' } },
   )
   stats.programsCompleted = completedPrograms.modifiedCount
@@ -176,18 +203,19 @@ export async function GET(req: Request) {
       meetingReminders: 0,
       taskReminders: 0,
       programReminders: 0,
+      pushSent: 0,
+      pushFailed: 0,
       errors: [] as string[],
     }
 
     // ── Step 1: Update expired statuses first ─────────────────────────────────
-    // Run this before sending reminders so status-based queries are accurate
     try {
       results.statusUpdates = await updateExpiredStatuses(todayStr, now)
     } catch (err) {
       results.errors.push(`Status update failed: ${(err as Error).message}`)
     }
 
-    // ── Step 2: Send meeting reminders ────────────────────────────────────────
+    // ── Step 2: Meeting reminders (email + push) ──────────────────────────────
     const meetings = await Meeting.find({
       status: 'upcoming',
       date: { $in: [todayStr, tomorrowStr] },
@@ -223,6 +251,7 @@ export async function GET(req: Request) {
           meeting.participants ?? [],
         )
 
+        // Email — unchanged behavior, per-recipient failures are already non-fatal
         for (const { email, name } of recipients) {
           try {
             await sendMeetingReminderEmail(email, name, meeting, reminderType)
@@ -232,6 +261,31 @@ export async function GET(req: Request) {
             )
           }
         }
+
+        // Push — fires to registered users only (participants without accounts
+        // have no subscription to target). Fully independent of the email loop above.
+        const labelMap: Record<ReminderType, string> = {
+          '1day': 'tomorrow',
+          '2hr': 'in 2 hours',
+          '30min': 'in 30 minutes',
+        }
+        const { sent, failed } = await pushToAssignedUsers(
+          assignedIds,
+          {
+            title: `Meeting ${labelMap[reminderType]}`,
+            body: `"${meeting.title}" — ${meeting.date} ${meeting.startTime} WAT${
+              meeting.location ? ` · ${meeting.location}` : ''
+            }`,
+            tag: `meeting-${meeting._id}-${reminderType}`,
+            url: '/meetings',
+            entityId: (meeting._id as Types.ObjectId).toString(),
+            entityType: 'meeting',
+            priority: meeting.priority as 'low' | 'medium' | 'high',
+          },
+          results.errors,
+        )
+        results.pushSent += sent
+        results.pushFailed += failed
 
         await ReminderLog.create({
           entityId: meeting._id,
@@ -246,7 +300,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // ── Step 3: Send task reminders ───────────────────────────────────────────
+    // ── Step 3: Task reminders (email + push) ─────────────────────────────────
     const tasks = await Task.find({
       status: { $in: ['todo', 'in_progress'] },
       dueDate: tomorrowStr,
@@ -288,6 +342,25 @@ export async function GET(req: Request) {
           }
         }
 
+        const pushTargets = Array.from(
+          new Set([...assignedIds, task.createdBy.toString()]),
+        )
+        const { sent, failed } = await pushToAssignedUsers(
+          pushTargets,
+          {
+            title: 'Task due tomorrow',
+            body: `"${task.title}" is due ${task.dueDate}`,
+            tag: `task-${task._id}-1day`,
+            url: '/tasks',
+            entityId: (task._id as Types.ObjectId).toString(),
+            entityType: 'task',
+            priority: task.priority as 'low' | 'medium' | 'high',
+          },
+          results.errors,
+        )
+        results.pushSent += sent
+        results.pushFailed += failed
+
         await ReminderLog.create({
           entityId: task._id,
           entityType: 'task',
@@ -301,7 +374,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // ── Step 4: Send program reminders ────────────────────────────────────────
+    // ── Step 4: Program reminders (email + push) ──────────────────────────────
     const programs = await Program.find({
       status: 'upcoming',
       startDate: tomorrowStr,
@@ -332,6 +405,21 @@ export async function GET(req: Request) {
             )
           }
         }
+
+        const { sent, failed } = await pushToAssignedUsers(
+          assignedIds,
+          {
+            title: 'Program starting soon',
+            body: `"${program.title}" starts ${program.startDate}`,
+            tag: `program-${program._id}-1day`,
+            url: '/programs',
+            entityId: (program._id as Types.ObjectId).toString(),
+            entityType: 'program',
+          },
+          results.errors,
+        )
+        results.pushSent += sent
+        results.pushFailed += failed
 
         await ReminderLog.create({
           entityId: program._id,
