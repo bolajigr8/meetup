@@ -117,7 +117,7 @@ export default function Navbar() {
             className='font-jakarta text-[19px] font-bold tracking-[-0.3px]'
             style={{ color: 'var(--of-heading)' }}
           >
-            Meet<span style={{ color: 'var(--of-blue)' }}>Up</span>
+            Gab<span style={{ color: 'var(--of-blue)' }}>Link</span>
           </span>
         </Link>
 

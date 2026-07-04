@@ -99,7 +99,7 @@ export default function SectionOne() {
             className='of-fade-up-2 text-base md:text-[17px] leading-[1.72] mb-8 max-w-115'
             style={{ color: 'var(--of-muted)' }}
           >
-            MeetUp brings your meetings, tasks, and training programs into one
+            GabLink brings your meetings, tasks, and training programs into one
             place — with automated email reminders that run on{' '}
             <strong style={{ color: 'var(--of-body)', fontWeight: 600 }}>
               West Africa Time
@@ -186,7 +186,7 @@ export default function SectionOne() {
               <strong style={{ color: 'var(--of-body)' }}>
                 Nigerian organizations
               </strong>{' '}
-              rely on MeetUp
+              rely on GabLink
             </p>
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function SectionOne() {
                   color: 'rgba(255,255,255,.75)',
                 }}
               >
-                app.MeetUp.ng/dashboard/overview
+                app.GabLink.ng/dashboard/overview
               </div>
             </div>
 
@@ -483,7 +483,7 @@ export default function SectionOne() {
                 className='font-mono-of text-[10px] flex-1 text-center'
                 style={{ color: 'rgba(255,255,255,.75)' }}
               >
-                app.MeetUp.ng/dashboard
+                app.GabLink.ng/dashboard
               </span>
             </div>
             <div className='p-4' style={{ background: 'var(--of-surface)' }}>

@@ -101,8 +101,8 @@ export default function LinkAccountForm() {
           <line x1='12' y1='16' x2='12.01' y2='16' />
         </svg>
         <span>
-          A MeetUp account already exists for this email. Enter your password to
-          link Google sign-in to your account.
+          A GabLink account already exists for this email. Enter your password
+          to link Google sign-in to your account.
         </span>
       </div>
 
@@ -111,7 +111,7 @@ export default function LinkAccountForm() {
           className='text-sm font-medium'
           style={{ color: 'var(--of-heading)' }}
         >
-          Your MeetUp password
+          Your GabLink password
         </label>
         <input
           type='password'

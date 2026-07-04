@@ -144,7 +144,7 @@ export default function Footer() {
             className='text-[12.5px] text-center sm:text-left'
             style={{ color: 'rgba(255,255,255,.28)' }}
           >
-            © 2026 MeetUp ·{' '}
+            © 2026 GabLink ·{' '}
             <span style={{ color: 'rgba(255,255,255,.42)' }}>
               Built with Next.js · MongoDB · Vercel
             </span>

@@ -57,7 +57,7 @@ const steps = [
   {
     num: '02',
     title: 'Add your activities',
-    desc: 'Create meetings, tasks, and programs. Invite participants — no MeetUp account needed to receive reminders.',
+    desc: 'Create meetings, tasks, and programs. Invite participants — no GabLink account needed to receive reminders.',
   },
   {
     num: '03',
@@ -192,7 +192,7 @@ export default function SectionTwo() {
               className='text-[15px] md:text-[15.5px] leading-[1.7] max-w-130'
               style={{ color: 'var(--of-muted)' }}
             >
-              From scheduling to tracking to training, MeetUp centralizes every
+              From scheduling to tracking to training, GabLink centralizes every
               organizational activity with smart automation baked in.
             </p>
           </div>
