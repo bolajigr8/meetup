@@ -1,34 +1,35 @@
 // src/app/(dashboard)/meetings/page.tsx
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, CalendarDays } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import PageHeader from '@/components/shared/PageHeader'
 import EmptyState from '@/components/shared/EmptyState'
+import ViewModeToggle from '@/components/shared/ViewModeToggle'
 import MeetingCard, { Meeting } from '@/components/meetings/MeetingCard'
 import MeetingDialog from '@/components/meetings/MeetingDialog'
 import DeleteMeetingDialog from '@/components/meetings/DeleteMeetingDialog'
 import type { MeetingFormData } from '@/validations/meeting'
+import { isMeetingPast } from '@/lib/date-helpers'
 
-const FILTER_OPTIONS = [
-  'all',
-  'upcoming',
-  'ongoing',
-  'completed',
-  'cancelled',
-] as const
-type Filter = (typeof FILTER_OPTIONS)[number]
+const ACTIVE_FILTER_OPTIONS = ['all', 'upcoming', 'ongoing'] as const
+const PAST_FILTER_OPTIONS = ['all', 'completed', 'cancelled'] as const
+type ActiveFilter = (typeof ACTIVE_FILTER_OPTIONS)[number]
+type PastFilter = (typeof PAST_FILTER_OPTIONS)[number]
 
 export default function MeetingsPage() {
   const { data: session } = useSession()
   const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
 
-  const [meetings, setMeetings] = useState<Meeting[]>([])
+  const [allMeetings, setAllMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<Filter>('all')
+  const [viewMode, setViewMode] = useState<'upcoming' | 'past'>('upcoming')
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all')
+  const [pastFilter, setPastFilter] = useState<PastFilter>('all')
+
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | undefined>()
@@ -36,14 +37,15 @@ export default function MeetingsPage() {
   const fetchMeetings = useCallback(async () => {
     setLoading(true)
     try {
-      const params = filter !== 'all' ? `?status=${filter}` : ''
-      const res = await fetch(`/api/v1/meetings${params}`)
+      // Fetch everything once — active/past split and status filtering
+      // happen entirely client-side below.
+      const res = await fetch('/api/v1/meetings?status=all&limit=100')
       const json = await res.json()
       if (!res.ok)
         throw new Error(
           json.error?.message ?? json.message ?? 'Failed to load meetings',
         )
-      setMeetings(json.data)
+      setAllMeetings(json.data)
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Failed to load meetings',
@@ -51,24 +53,51 @@ export default function MeetingsPage() {
     } finally {
       setLoading(false)
     }
-  }, [filter])
+  }, [])
 
   useEffect(() => {
     fetchMeetings()
   }, [fetchMeetings])
+
+  const { activeMeetings, pastMeetings } = useMemo(() => {
+    const active: Meeting[] = []
+    const past: Meeting[] = []
+    for (const m of allMeetings) {
+      if (isMeetingPast(m)) past.push(m)
+      else active.push(m)
+    }
+    // Soonest upcoming meeting first
+    active.sort((a, b) =>
+      (a.date + a.startTime).localeCompare(b.date + b.startTime),
+    )
+    // Most recently past on top
+    past.sort((a, b) =>
+      (b.date + b.startTime).localeCompare(a.date + a.startTime),
+    )
+    return { activeMeetings: active, pastMeetings: past }
+  }, [allMeetings])
+
+  const displayedMeetings = useMemo(() => {
+    if (viewMode === 'upcoming') {
+      if (activeFilter === 'all') return activeMeetings
+      return activeMeetings.filter((m) => m.status === activeFilter)
+    }
+    if (pastFilter === 'all') return pastMeetings
+    return pastMeetings.filter((m) => m.status === pastFilter)
+  }, [viewMode, activeFilter, pastFilter, activeMeetings, pastMeetings])
 
   const openCreateDialog = () => {
     setSelectedMeeting(undefined)
     setMeetingDialogOpen(true)
   }
   const openEditDialog = (id: string) => {
-    const m = meetings.find((m) => m.id === id)
+    const m = allMeetings.find((m) => m.id === id)
     if (!m) return
     setSelectedMeeting(m)
     setMeetingDialogOpen(true)
   }
   const openDeleteDialog = (id: string) => {
-    const m = meetings.find((m) => m.id === id)
+    const m = allMeetings.find((m) => m.id === id)
     if (!m) return
     setSelectedMeeting(m)
     setDeleteDialogOpen(true)
@@ -80,7 +109,7 @@ export default function MeetingsPage() {
   }
 
   const handleDeleteConfirm = async (id: string) => {
-    setMeetings((prev) =>
+    setAllMeetings((prev) =>
       prev.map((m) =>
         m.id === id ? { ...m, status: 'cancelled' as const } : m,
       ),
@@ -101,13 +130,19 @@ export default function MeetingsPage() {
     }
   }
 
-  const upcomingCount = meetings.filter((m) => m.status === 'upcoming').length
+  const upcomingCount = activeMeetings.filter(
+    (m) => m.status === 'upcoming',
+  ).length
 
   return (
     <div>
       <PageHeader
         title='Meetings'
-        subtitle={`${meetings.length} total · ${upcomingCount} upcoming`}
+        subtitle={
+          viewMode === 'upcoming'
+            ? `${activeMeetings.length} active · ${upcomingCount} upcoming`
+            : `${pastMeetings.length} past meeting${pastMeetings.length !== 1 ? 's' : ''}`
+        }
         action={
           isAdmin ? (
             <Button
@@ -122,28 +157,43 @@ export default function MeetingsPage() {
         }
       />
 
-      <div
-        className='flex flex-wrap gap-1 p-1 rounded-lg mb-6 w-fit'
-        style={{ background: 'var(--of-border)' }}
-      >
-        {FILTER_OPTIONS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className='px-3.5 py-1.5 rounded-md text-xs font-semibold capitalize transition-all duration-150'
-            style={
-              filter === f
-                ? {
-                    background: '#fff',
-                    color: 'var(--of-heading)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,.08)',
-                  }
-                : { color: 'var(--of-muted)' }
-            }
-          >
-            {f}
-          </button>
-        ))}
+      <div className='flex flex-wrap items-center gap-3 mb-6'>
+        <ViewModeToggle
+          mode={viewMode}
+          onChange={setViewMode}
+          pastCount={pastMeetings.length}
+        />
+
+        <div
+          className='flex flex-wrap gap-1 p-1 rounded-lg w-fit'
+          style={{ background: 'var(--of-border)' }}
+        >
+          {(viewMode === 'upcoming'
+            ? ACTIVE_FILTER_OPTIONS
+            : PAST_FILTER_OPTIONS
+          ).map((f) => (
+            <button
+              key={f}
+              onClick={() =>
+                viewMode === 'upcoming'
+                  ? setActiveFilter(f as ActiveFilter)
+                  : setPastFilter(f as PastFilter)
+              }
+              className='px-3.5 py-1.5 rounded-md text-xs font-semibold capitalize transition-all duration-150'
+              style={
+                (viewMode === 'upcoming' ? activeFilter : pastFilter) === f
+                  ? {
+                      background: '#fff',
+                      color: 'var(--of-heading)',
+                      boxShadow: '0 1px 3px rgba(0,0,0,.08)',
+                    }
+                  : { color: 'var(--of-muted)' }
+              }
+            >
+              {f}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -156,23 +206,31 @@ export default function MeetingsPage() {
             />
           ))}
         </div>
-      ) : meetings.length === 0 ? (
+      ) : displayedMeetings.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
-          title='No meetings found'
+          title={viewMode === 'past' ? 'No past meetings' : 'No meetings found'}
           description={
-            filter === 'all'
-              ? isAdmin
-                ? "You haven't created any meetings yet. Schedule your first one."
-                : 'No meetings have been assigned to you yet.'
-              : `No ${filter} meetings.`
+            viewMode === 'past'
+              ? 'Meetings move here automatically once their scheduled time has passed.'
+              : activeFilter === 'all'
+                ? isAdmin
+                  ? "You haven't created any meetings yet. Schedule your first one."
+                  : 'No meetings have been assigned to you yet.'
+                : `No ${activeFilter} meetings.`
           }
-          actionLabel={isAdmin ? 'Schedule a meeting' : undefined}
-          onAction={isAdmin ? openCreateDialog : undefined}
+          actionLabel={
+            viewMode === 'upcoming' && isAdmin
+              ? 'Schedule a meeting'
+              : undefined
+          }
+          onAction={
+            viewMode === 'upcoming' && isAdmin ? openCreateDialog : undefined
+          }
         />
       ) : (
         <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4'>
-          {meetings.map((m) => (
+          {displayedMeetings.map((m) => (
             <MeetingCard
               key={m.id}
               meeting={m}
