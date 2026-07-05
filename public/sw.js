@@ -1,6 +1,6 @@
-const CACHE_VERSION = 'gablink-v1'
+const CACHE_VERSION = 'gablink-v3'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
-const PRECACHE_URLS = ['/', '/manifest.json']
+const PRECACHE_URLS = ['/manifest.json']
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()
@@ -26,24 +26,31 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-// Network-first for API routes — app data is never served stale.
-// Cache-first for the static app shell.
+// Only Next.js's content-hashed static assets (/_next/static/...) and the
+// app icons/manifest are safe to serve cache-first — their filenames change
+// whenever their content does, so a cached copy is never stale.
+//
+// EVERYTHING else — full page navigations, Next.js's internal RSC/flight
+// data fetches triggered by client-side <Link> navigation, and API routes —
+// is network-first. Serving any of those from a stale cache caused two real
+// bugs: sign-out staying on a cached authenticated page (middleware never
+// re-ran), and "Application error: a client-side exception" when clicking
+// sidebar links (a stale cached RSC payload broke React's client render).
+function isImmutableAsset(url) {
+  return (
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.json'
+  )
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event
   if (request.method !== 'GET') return
 
   const url = new URL(request.url)
 
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request).catch(() =>
-        caches.match(request).then((cached) => cached ?? Response.error()),
-      ),
-    )
-    return
-  }
-
-  if (url.origin === self.location.origin) {
+  if (isImmutableAsset(url)) {
     event.respondWith(
       caches.match(request).then(
         (cached) =>
@@ -55,7 +62,23 @@ self.addEventListener('fetch', (event) => {
           }),
       ),
     )
+    return
   }
+
+  // Network-first for everything else: documents, RSC/flight fetches, API calls.
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok && url.origin === self.location.origin) {
+          const clone = response.clone()
+          caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone))
+        }
+        return response
+      })
+      .catch(() =>
+        caches.match(request).then((cached) => cached ?? Response.error()),
+      ),
+  )
 })
 
 self.addEventListener('push', (event) => {
@@ -103,9 +126,6 @@ self.addEventListener('notificationclick', (event) => {
   if (action === 'dismiss') return
 
   if (action === 'snooze') {
-    // Best-effort only: this relies on the SW staying alive for 5 minutes,
-    // which Android/Chrome does not guarantee once backgrounded. There is
-    // no server-side reschedule wired up yet (scheduling work is on hold).
     event.waitUntil(
       new Promise((resolve) => {
         setTimeout(

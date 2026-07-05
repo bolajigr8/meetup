@@ -1,4 +1,3 @@
-// src/app/api/v1/meetings/[id]/route.ts
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
@@ -6,12 +5,7 @@ import { ApiError, withErrorHandler } from '@/lib/api-error'
 import { updateMeetingSchema } from '@/schemas/meeting.schemas'
 import Meeting from '@/models/Meeting'
 import { Types } from 'mongoose'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serialize(doc: Record<string, any>) {
-  const { _id, __v, ...rest } = doc
-  return { id: (_id as { toString(): string }).toString(), ...rest }
-}
+import { serialize } from '@/lib/serialize'
 
 async function getMeetingOrThrow(id: string, userId: string) {
   if (!id || id === 'undefined')
@@ -46,7 +40,6 @@ export const GET = withErrorHandler(async (_req, ctx) => {
     return NextResponse.json(serialize(meeting as Record<string, any>))
   }
 
-  // Regular user — can only read meetings assigned to them
   const meeting = await Meeting.findOne({
     _id: id,
     assignedTo: new Types.ObjectId(session.user.id),

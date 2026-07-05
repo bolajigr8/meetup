@@ -1,4 +1,3 @@
-// src/app/api/v1/programs/[id]/route.ts
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
@@ -6,12 +5,7 @@ import { ApiError, withErrorHandler } from '@/lib/api-error'
 import { updateProgramSchema } from '@/schemas/program.schemas'
 import Program from '@/models/Program'
 import { Types } from 'mongoose'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serialize(doc: Record<string, any>) {
-  const { _id, __v, ...rest } = doc
-  return { id: (_id as { toString(): string }).toString(), ...rest }
-}
+import { serialize } from '@/lib/serialize'
 
 async function getProgramOrThrow(id: string, userId: string) {
   if (!id || id === 'undefined')

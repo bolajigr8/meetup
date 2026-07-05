@@ -1,4 +1,3 @@
-// src/app/api/v1/meetings/route.ts
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
@@ -9,12 +8,7 @@ import {
 } from '@/schemas/meeting.schemas'
 import Meeting from '@/models/Meeting'
 import { Types } from 'mongoose'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serialize(doc: Record<string, any>) {
-  const { _id, __v, ...rest } = doc
-  return { id: (_id as { toString(): string }).toString(), ...rest }
-}
+import { serialize } from '@/lib/serialize'
 
 export const GET = withErrorHandler(async (req) => {
   const session = await auth()
@@ -45,8 +39,6 @@ export const GET = withErrorHandler(async (req) => {
   const uid = new Types.ObjectId(session.user.id)
   const isAdmin = session.user.isAdmin || session.user.isSuperAdmin
 
-  // Admins see everything they created
-  // Regular users see only meetings assigned to them
   const filter: Record<string, unknown> = isAdmin
     ? { createdBy: uid }
     : { assignedTo: uid }
