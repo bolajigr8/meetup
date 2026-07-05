@@ -6,15 +6,21 @@ import { ApiError, withErrorHandler } from '@/lib/api-error'
 import Meeting from '@/models/Meeting'
 import Task from '@/models/Task'
 import Program from '@/models/Program'
+import { isMeetingPast, isTaskPast, isProgramPast } from '@/lib/date-helpers'
+
+// Literal-typed lean shapes matching the actual Mongoose schema enums exactly
+// (status/dueDate are required, non-optional fields at the DB level) — this
+// is what date-helpers.ts's MeetingLike/TaskLike/ProgramLike expect.
 
 interface LeanMeeting {
   _id: Types.ObjectId
   title: string
   participants: string[]
   location?: string
-  status: string
+  status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
   date: string
-  startTime?: string
+  startTime: string
+  endTime: string
   createdAt: Date
 }
 
@@ -23,8 +29,8 @@ interface LeanTask {
   title: string
   assignedToEmail?: string
   priority?: string
-  status: string
-  dueDate?: string
+  status: 'todo' | 'in_progress' | 'completed' | 'overdue'
+  dueDate: string
   createdAt: Date
 }
 
@@ -33,8 +39,9 @@ interface LeanProgram {
   title: string
   participants: string[]
   scheduleType?: string
-  status: string
-  startDate?: string
+  status: 'upcoming' | 'active' | 'completed' | 'cancelled'
+  startDate: string
+  endDate: string
   createdAt: Date
 }
 
@@ -48,6 +55,12 @@ type ActivityRaw = {
   priority?: string
   createdAt: Date
 }
+
+// How many recent docs per type to pull before filtering out past items —
+// wider than the final display count (4) so we still have enough left
+// after excluding anything whose date has already passed.
+const RECENT_FETCH_LIMIT = 15
+const RECENT_DISPLAY_LIMIT = 4
 
 export const GET = withErrorHandler(async () => {
   const session = await auth()
@@ -73,40 +86,86 @@ export const GET = withErrorHandler(async () => {
     : { assignedTo: new Types.ObjectId(uid) }
 
   const [
-    upcomingMeetings,
-    openTasks,
+    meetingsForStats,
+    openTasksForStats,
     overdueTasks,
-    activePrograms,
-    recentMeetings,
-    recentTasks,
-    recentPrograms,
+    programsForStats,
+    recentMeetingsRaw,
+    recentTasksRaw,
+    recentProgramsRaw,
   ] = await Promise.all([
-    Meeting.countDocuments({ ...meetingFilter, status: 'upcoming' }),
-    Task.countDocuments({
+    // Fetch candidate "upcoming/ongoing" meetings, then confirm with live
+    // date logic rather than trusting the stored status alone — this stays
+    // correct even if the cron job hasn't run since the meeting ended.
+    Meeting.find({ ...meetingFilter, status: { $in: ['upcoming', 'ongoing'] } })
+      .select('date startTime endTime status')
+      .lean<Pick<LeanMeeting, 'date' | 'startTime' | 'endTime' | 'status'>[]>(),
+
+    // "Open" tasks = not completed. Overdue tasks intentionally stay counted
+    // here too (they're still open/actionable, just late).
+    Task.find({
       ...taskFilter,
-      status: { $in: ['todo', 'in_progress'] },
-    }),
+      status: { $in: ['todo', 'in_progress', 'overdue'] },
+    })
+      .select('dueDate status')
+      .lean<Pick<LeanTask, 'dueDate' | 'status'>[]>(),
+
+    // Plain status count — a dedicated "needs attention" warning stat, not a
+    // date-filtered "past" bucket.
     Task.countDocuments({ ...taskFilter, status: 'overdue' }),
-    Program.countDocuments({ ...programFilter, status: 'active' }),
+
+    Program.find({ ...programFilter, status: 'active' })
+      .select('startDate endDate status')
+      .lean<Pick<LeanProgram, 'startDate' | 'endDate' | 'status'>[]>(),
 
     Meeting.find(meetingFilter)
       .sort({ createdAt: -1 })
-      .limit(4)
-      .select('title participants location status date startTime createdAt')
+      .limit(RECENT_FETCH_LIMIT)
+      .select(
+        'title participants location status date startTime endTime createdAt',
+      )
       .lean<LeanMeeting[]>(),
 
     Task.find(taskFilter)
       .sort({ createdAt: -1 })
-      .limit(4)
+      .limit(RECENT_FETCH_LIMIT)
       .select('title assignedToEmail priority status dueDate createdAt')
       .lean<LeanTask[]>(),
 
     Program.find(programFilter)
       .sort({ createdAt: -1 })
-      .limit(4)
-      .select('title participants scheduleType status startDate createdAt')
+      .limit(RECENT_FETCH_LIMIT)
+      .select(
+        'title participants scheduleType status startDate endDate createdAt',
+      )
       .lean<LeanProgram[]>(),
   ])
+
+  // ── Stats — confirmed against live dates, not just stored status ──────────
+  const upcomingMeetings = meetingsForStats.filter(
+    (m) => m.status === 'upcoming' && !isMeetingPast(m),
+  ).length
+
+  // Open tasks = everything not completed. Overdue tasks are deliberately
+  // included (per product decision: they stay visible/actionable, not archived).
+  const openTasks = openTasksForStats.length
+
+  const activePrograms = programsForStats.filter(
+    (p) => !isProgramPast(p),
+  ).length
+
+  // ── Recent activity — exclude anything whose date has already passed ──────
+  const recentMeetings = recentMeetingsRaw
+    .filter((m) => !isMeetingPast(m))
+    .slice(0, RECENT_DISPLAY_LIMIT)
+
+  const recentTasks = recentTasksRaw
+    .filter((t) => !isTaskPast(t))
+    .slice(0, RECENT_DISPLAY_LIMIT)
+
+  const recentPrograms = recentProgramsRaw
+    .filter((p) => !isProgramPast(p))
+    .slice(0, RECENT_DISPLAY_LIMIT)
 
   const meetingActivity: ActivityRaw[] = recentMeetings.map((doc) => {
     const count = doc.participants?.length ?? 0

@@ -18,9 +18,10 @@ const ACTIVE_STATUS_FILTERS = [
   'all',
   'todo',
   'in_progress',
+  'overdue',
   'completed',
 ] as const
-const PAST_STATUS_FILTERS = ['all', 'overdue', 'completed'] as const
+const PAST_STATUS_FILTERS = ['all', 'completed'] as const
 const PRIORITY_FILTERS = ['all', 'high', 'medium', 'low'] as const
 
 type ActiveStatusFilter = (typeof ACTIVE_STATUS_FILTERS)[number]
@@ -294,7 +295,7 @@ export default function TasksPage() {
           title={viewMode === 'past' ? 'No past tasks' : 'No tasks found'}
           description={
             viewMode === 'past'
-              ? 'Tasks move here automatically once their due date has passed.'
+              ? 'Completed tasks move here once their due date has passed.'
               : activeStatusFilter === 'all' && priorityFilter === 'all'
                 ? isAdmin
                   ? "You haven't created any tasks yet."

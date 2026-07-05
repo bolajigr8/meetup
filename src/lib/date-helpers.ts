@@ -48,17 +48,13 @@ interface TaskLike {
 }
 
 /**
- * Per your instruction: once dueDate has passed, the task moves to Past —
- * regardless of whether it was ever completed. This includes unfinished
- * ("overdue") tasks.
- *
- * If you'd rather keep unfinished overdue tasks visible in the active list
- * (since they're still actionable) and only archive completed ones, swap
- * the line below for:
- *   return task.status === 'completed' && task.dueDate < todayWATString()
+ * A task only moves to "Past" once it's been completed AND its due date
+ * has already gone by. Unfinished tasks — including ones marked "overdue" —
+ * stay in the active view since they're still actionable; overdue is a
+ * warning state, not an archive state.
  */
 export function isTaskPast(task: TaskLike): boolean {
-  return task.dueDate < todayWATString()
+  return task.status === 'completed' && task.dueDate < todayWATString()
 }
 
 interface ProgramLike {

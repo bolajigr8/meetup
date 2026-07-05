@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   CheckCircle2,
   Circle,
+  UserCheck,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import {
@@ -17,6 +18,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
+import AssignedUsers, {
+  type AssignedUser,
+} from '@/components/shared/AssignedUsers'
 
 export interface Task {
   id: string
@@ -27,7 +31,7 @@ export interface Task {
   status: 'todo' | 'in_progress' | 'completed' | 'overdue'
   category?: string
   assignedToEmail?: string
-  assignedTo?: { id: string; name: string; email: string }[]
+  assignedTo?: AssignedUser[]
 }
 
 const priorityStyles: Record<Task['priority'], { bg: string; text: string }> = {
@@ -58,10 +62,16 @@ export default function TaskCard({
 }: TaskCardProps) {
   const { data: session } = useSession()
   const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+  const currentUserId = session?.user?.id
 
   const pStyle = priorityStyles[task.priority]
   const sStyle = statusStyles[task.status]
   const done = task.status === 'completed'
+
+  const isAssignedToMe =
+    !isAdmin &&
+    !!currentUserId &&
+    (task.assignedTo ?? []).some((u) => u.id === currentUserId)
 
   return (
     <div
@@ -178,14 +188,41 @@ export default function TaskCard({
             </span>
           </div>
 
-          <div className='mt-2'>
+          <div className='flex items-center gap-2 mt-2 flex-wrap'>
             <span
               className='text-[10px] font-semibold'
               style={{ color: sStyle.color }}
             >
               ● {sStyle.label}
             </span>
+            {isAssignedToMe && (
+              <span
+                className='inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full'
+                style={{ background: '#EDE9FE', color: '#5B21B6' }}
+              >
+                <UserCheck size={9} />
+                Assigned to you
+              </span>
+            )}
           </div>
+
+          {/* {task.assignedTo && task.assignedTo.length > 0 && (
+            <div
+              className='mt-2.5 pt-2.5 border-t'
+              style={{ borderColor: 'var(--of-border)' }}
+            >
+              <AssignedUsers users={task.assignedTo} />
+            </div>
+          )} */}
+
+          {isAdmin && task.assignedTo && task.assignedTo.length > 0 && (
+            <div
+              className='mt-2.5 pt-2.5 border-t'
+              style={{ borderColor: 'var(--of-border)' }}
+            >
+              <AssignedUsers users={task.assignedTo} />
+            </div>
+          )}
         </div>
       </div>
     </div>

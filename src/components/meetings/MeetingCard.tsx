@@ -1,7 +1,7 @@
 // src/components/meetings/MeetingCard.tsx
 'use client'
 
-import { MapPin, Users, Clock, MoreHorizontal } from 'lucide-react'
+import { MapPin, Users, Clock, MoreHorizontal, UserCheck } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import {
   DropdownMenu,
@@ -10,6 +10,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
+import AssignedUsers, {
+  type AssignedUser,
+} from '@/components/shared/AssignedUsers'
 
 export interface Meeting {
   id: string
@@ -20,7 +23,7 @@ export interface Meeting {
   endTime: string
   location?: string
   participants: string[]
-  assignedTo?: { id: string; name: string; email: string }[]
+  assignedTo?: AssignedUser[]
   priority: 'low' | 'medium' | 'high'
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
 }
@@ -57,9 +60,15 @@ export default function MeetingCard({
 }: MeetingCardProps) {
   const { data: session } = useSession()
   const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+  const currentUserId = session?.user?.id
 
   const pStyle = priorityStyles[meeting.priority]
   const sStyle = statusStyles[meeting.status]
+
+  const isAssignedToMe =
+    !isAdmin &&
+    !!currentUserId &&
+    (meeting.assignedTo ?? []).some((u) => u.id === currentUserId)
 
   return (
     <div
@@ -127,6 +136,15 @@ export default function MeetingCard({
         >
           {meeting.priority} priority
         </span>
+        {isAssignedToMe && (
+          <span
+            className='inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full'
+            style={{ background: '#EDE9FE', color: '#5B21B6' }}
+          >
+            <UserCheck size={10} />
+            Assigned to you
+          </span>
+        )}
       </div>
 
       <div className='flex flex-col gap-1.5'>
@@ -164,6 +182,36 @@ export default function MeetingCard({
           </span>
         </div>
       </div>
+
+      {/* {meeting.assignedTo && meeting.assignedTo.length > 0 && (
+        <div
+          className='mt-3 pt-3 border-t'
+          style={{ borderColor: 'var(--of-border)' }}
+        >
+          <p
+            className='text-[10px] font-semibold uppercase tracking-wide mb-1.5'
+            style={{ color: 'var(--of-muted)' }}
+          >
+            Assigned to
+          </p>
+          <AssignedUsers users={meeting.assignedTo} />
+        </div>
+      )} */}
+
+      {isAdmin && meeting.assignedTo && meeting.assignedTo.length > 0 && (
+        <div
+          className='mt-3 pt-3 border-t'
+          style={{ borderColor: 'var(--of-border)' }}
+        >
+          <p
+            className='text-[10px] font-semibold uppercase tracking-wide mb-1.5'
+            style={{ color: 'var(--of-muted)' }}
+          >
+            Assigned to
+          </p>
+          <AssignedUsers users={meeting.assignedTo} />
+        </div>
+      )}
     </div>
   )
 }

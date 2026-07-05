@@ -1,7 +1,14 @@
 // src/components/programs/ProgramCard.tsx
 'use client'
 
-import { Calendar, Users, BookOpen, MoreHorizontal, Zap } from 'lucide-react'
+import {
+  Calendar,
+  Users,
+  BookOpen,
+  MoreHorizontal,
+  Zap,
+  UserCheck,
+} from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import {
   DropdownMenu,
@@ -10,6 +17,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
+import AssignedUsers, {
+  type AssignedUser,
+} from '@/components/shared/AssignedUsers'
 
 export interface Program {
   id: string
@@ -18,7 +28,7 @@ export interface Program {
   startDate: string
   endDate: string
   participants: string[]
-  assignedTo?: { id: string; name: string; email: string }[]
+  assignedTo?: AssignedUser[]
   scheduleType: 'standard' | 'intensive'
   status: 'upcoming' | 'active' | 'completed' | 'cancelled'
 }
@@ -51,10 +61,16 @@ export default function ProgramCard({
 }: ProgramCardProps) {
   const { data: session } = useSession()
   const isAdmin = session?.user?.isAdmin || session?.user?.isSuperAdmin || false
+  const currentUserId = session?.user?.id
 
   const sched = scheduleStyles[program.scheduleType]
   const SchedIcon = sched.icon
   const stat = statusStyles[program.status]
+
+  const isAssignedToMe =
+    !isAdmin &&
+    !!currentUserId &&
+    (program.assignedTo ?? []).some((u) => u.id === currentUserId)
 
   return (
     <div
@@ -132,6 +148,15 @@ export default function ProgramCard({
           {program.scheduleType.charAt(0).toUpperCase() +
             program.scheduleType.slice(1)}
         </span>
+        {isAssignedToMe && (
+          <span
+            className='inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full'
+            style={{ background: '#EDE9FE', color: '#5B21B6' }}
+          >
+            <UserCheck size={9} />
+            Assigned to you
+          </span>
+        )}
       </div>
 
       <div className='flex flex-col gap-1.5'>
@@ -158,6 +183,36 @@ export default function ProgramCard({
           </span>
         </div>
       </div>
+
+      {/* {program.assignedTo && program.assignedTo.length > 0 && (
+        <div
+          className='mt-3 pt-3 border-t'
+          style={{ borderColor: 'var(--of-border)' }}
+        >
+          <p
+            className='text-[10px] font-semibold uppercase tracking-wide mb-1.5'
+            style={{ color: 'var(--of-muted)' }}
+          >
+            Assigned to
+          </p>
+          <AssignedUsers users={program.assignedTo} />
+        </div>
+      )} */}
+
+      {isAdmin && program.assignedTo && program.assignedTo.length > 0 && (
+        <div
+          className='mt-3 pt-3 border-t'
+          style={{ borderColor: 'var(--of-border)' }}
+        >
+          <p
+            className='text-[10px] font-semibold uppercase tracking-wide mb-1.5'
+            style={{ color: 'var(--of-muted)' }}
+          >
+            Assigned to
+          </p>
+          <AssignedUsers users={program.assignedTo} />
+        </div>
+      )}
     </div>
   )
 }
