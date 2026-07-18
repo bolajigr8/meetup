@@ -59,6 +59,7 @@ export function usePushNotifications() {
       }
       const reg = await navigator.serviceWorker.ready
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      console.log('VAPID KEY FROM ENV:', JSON.stringify(publicKey)) // ← moved here, right after reading it
       if (!publicKey) throw new Error('Missing VAPID public key')
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,

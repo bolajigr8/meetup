@@ -9,6 +9,27 @@ const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ?? 'Gablink <noreply@yourdomain.com>'
 const BASE_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
 
+// ─── Send wrapper ─────────────────────────────────────────────────────────────
+// IMPORTANT: the Resend SDK does NOT throw on API-level failures (bad domain,
+// unverified sender, rate limit, invalid recipient, etc). It resolves with
+// { data: null, error: {...} } instead. Without this check, every send()
+// call below would silently "succeed" even when Resend rejected the email,
+// which is why reminders were failing with no error anywhere in the logs.
+// Every caller in this file must go through this wrapper, not resend.emails.send() directly.
+async function sendEmail(
+  params: Parameters<typeof resend.emails.send>[0],
+  context: string,
+): Promise<void> {
+  const { error } = await resend.emails.send(params)
+  if (error) {
+    throw new Error(
+      `Resend rejected email (${context}) to ${
+        typeof params === 'object' && 'to' in params ? params.to : 'unknown'
+      }: ${error.name ?? 'error'} — ${error.message ?? JSON.stringify(error)}`,
+    )
+  }
+}
+
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 const COLORS = {
@@ -186,12 +207,13 @@ export async function sendPasswordResetEmail(
   const resetUrl = `${BASE_URL}/reset-password?token=${rawToken}`
   const firstName = name.split(' ')[0]
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to: email,
-    subject: 'Reset your Gablink password',
-    html: layout(
-      `
+  await sendEmail(
+    {
+      from: FROM_EMAIL,
+      to: email,
+      subject: 'Reset your Gablink password',
+      html: layout(
+        `
       ${heroStripe(COLORS.brand, '🔐', 'Security Request')}
 
       <!-- Body -->
@@ -230,9 +252,11 @@ export async function sendPasswordResetEmail(
         </tr>
       </table>
       `,
-      `Reset your Gablink password — link expires in 60 minutes`,
-    ),
-  })
+        `Reset your Gablink password — link expires in 60 minutes`,
+      ),
+    },
+    'password-reset',
+  )
 }
 
 // ─── Welcome Email ────────────────────────────────────────────────────────────
@@ -244,12 +268,13 @@ export async function sendWelcomeEmail(
   const dashboardUrl = `${BASE_URL}/overview`
   const firstName = name.split(' ')[0]
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to: email,
-    subject: `Welcome to Gablink, ${firstName}`,
-    html: layout(
-      `
+  await sendEmail(
+    {
+      from: FROM_EMAIL,
+      to: email,
+      subject: `Welcome to Gablink, ${firstName}`,
+      html: layout(
+        `
       ${heroStripe(COLORS.brand, '👋', 'Welcome')}
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -309,9 +334,11 @@ export async function sendWelcomeEmail(
         </tr>
       </table>
       `,
-      `Welcome to Gablink — your workspace is ready`,
-    ),
-  })
+        `Welcome to Gablink — your workspace is ready`,
+      ),
+    },
+    'welcome',
+  )
 }
 
 // ─── Meeting Reminder ─────────────────────────────────────────────────────────
@@ -365,12 +392,13 @@ export async function sendMeetingReminderEmail(
   const firstName = name.split(' ')[0]
   const meetingsUrl = `${BASE_URL}/meetings`
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to: email,
-    subject: `Meeting Reminder: "${meeting.title}" — ${cfg.label}`,
-    html: layout(
-      `
+  await sendEmail(
+    {
+      from: FROM_EMAIL,
+      to: email,
+      subject: `Meeting Reminder: "${meeting.title}" — ${cfg.label}`,
+      html: layout(
+        `
       ${heroStripe(cfg.accentColor, cfg.emoji, cfg.urgency)}
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -422,9 +450,11 @@ export async function sendMeetingReminderEmail(
         </tr>
       </table>
       `,
-      `${cfg.sublabel}: ${meeting.title} on ${meeting.date}`,
-    ),
-  })
+        `${cfg.sublabel}: ${meeting.title} on ${meeting.date}`,
+      ),
+    },
+    'meeting-reminder',
+  )
 }
 
 // ─── Task Reminder ────────────────────────────────────────────────────────────
@@ -462,12 +492,13 @@ export async function sendTaskReminderEmail(
   const firstName = name.split(' ')[0]
   const priorityCfg = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.medium
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to: email,
-    subject: `Task Due Tomorrow: "${task.title}"`,
-    html: layout(
-      `
+  await sendEmail(
+    {
+      from: FROM_EMAIL,
+      to: email,
+      subject: `Task Due Tomorrow: "${task.title}"`,
+      html: layout(
+        `
       ${heroStripe(COLORS.amber, '✅', 'Task Reminder')}
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -526,9 +557,11 @@ export async function sendTaskReminderEmail(
         </tr>
       </table>
       `,
-      `Task due tomorrow: ${task.title}`,
-    ),
-  })
+        `Task due tomorrow: ${task.title}`,
+      ),
+    },
+    'task-reminder',
+  )
 }
 
 // ─── Program Reminder ─────────────────────────────────────────────────────────
@@ -553,12 +586,13 @@ export async function sendProgramReminderEmail(
       ? '⚡ Intensive Programme'
       : '📅 Standard Programme'
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to: email,
-    subject: `Programme Starting Tomorrow: "${program.title}"`,
-    html: layout(
-      `
+  await sendEmail(
+    {
+      from: FROM_EMAIL,
+      to: email,
+      subject: `Programme Starting Tomorrow: "${program.title}"`,
+      html: layout(
+        `
       ${heroStripe(COLORS.teal, '🎓', 'Programme Reminder')}
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -619,7 +653,9 @@ export async function sendProgramReminderEmail(
         </tr>
       </table>
       `,
-      `Programme starting tomorrow: ${program.title}`,
-    ),
-  })
+        `Programme starting tomorrow: ${program.title}`,
+      ),
+    },
+    'program-reminder',
+  )
 }
