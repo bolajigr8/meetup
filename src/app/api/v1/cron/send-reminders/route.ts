@@ -42,7 +42,11 @@ function watToUTC(date: string, time: string): Date {
   return new Date(Date.UTC(year, month - 1, day, hour - 1, minute))
 }
 
-const WINDOW_MS = 7 * 60 * 1000
+// const WINDOW_MS = 7 * 60 * 1000
++ const WINDOW_MS = 8 * 60 * 1000
+
+
+
 
 function inWindow(targetTime: Date, now: Date): boolean {
   return Math.abs(targetTime.getTime() - now.getTime()) <= WINDOW_MS
