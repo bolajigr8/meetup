@@ -51,7 +51,7 @@ export default function AuthLayout({
             className='font-jakarta text-[17px] font-bold tracking-[-0.3px]'
             style={{ color: 'var(--of-heading)' }}
           >
-            Meet<span style={{ color: 'var(--of-blue)' }}>Up</span>
+            Gab<span style={{ color: 'var(--of-blue)' }}>Link</span>
           </span>
         </a>
 
@@ -70,7 +70,7 @@ export default function AuthLayout({
 
       <footer className='relative z-10 py-4 text-center'>
         <p className='text-xs' style={{ color: 'var(--of-muted)' }}>
-          © {new Date().getFullYear()} MeetUp · All times in WAT (UTC+1)
+          © {new Date().getFullYear()} GabLink · All times in WAT (UTC+1)
         </p>
       </footer>
     </div>
