@@ -42,7 +42,6 @@ function watToUTC(date: string, time: string): Date {
   return new Date(Date.UTC(year, month - 1, day, hour - 1, minute))
 }
 
-// const WINDOW_MS = 7 * 60 * 1000
 const WINDOW_MS = 8 * 60 * 1000
 
 function inWindow(targetTime: Date, now: Date): boolean {
@@ -252,10 +251,27 @@ export async function GET(req: Request) {
           meeting.participants ?? [],
         )
 
-        // Email — unchanged behavior, per-recipient failures are already non-fatal
+        // Creator (often an admin) is not necessarily in assignedTo — without
+        // this, admins/superadmins who create a meeting but aren't separately
+        // assigned to it never receive their own reminder emails.
+        const meetingCreator = await User.findById(meeting.createdBy)
+          .select('email name')
+          .lean()
+        if (meetingCreator) {
+          const creatorEmail = meetingCreator.email.toLowerCase()
+          if (!recipients.find((r) => r.email === creatorEmail)) {
+            recipients.push({ email: creatorEmail, name: meetingCreator.name })
+          }
+        }
+
+        // Email — per-recipient failures are non-fatal, but we track how many
+        // actually succeeded so a fully-failed batch can retry next run
+        // instead of being marked as sent forever.
+        let emailSuccessCount = 0
         for (const { email, name } of recipients) {
           try {
             await sendMeetingReminderEmail(email, name, meeting, reminderType)
+            emailSuccessCount++
           } catch (emailErr) {
             results.errors.push(
               `Meeting ${meeting._id} email to ${email}: ${(emailErr as Error).message}`,
@@ -265,13 +281,18 @@ export async function GET(req: Request) {
 
         // Push — fires to registered users only (participants without accounts
         // have no subscription to target). Fully independent of the email loop above.
+        // Includes the creator alongside assignedTo, for the same reason as the
+        // email recipients above.
+        const meetingPushTargets = Array.from(
+          new Set([...assignedIds, meeting.createdBy.toString()]),
+        )
         const labelMap: Record<ReminderType, string> = {
           '1day': 'tomorrow',
           '2hr': 'in 2 hours',
           '30min': 'in 30 minutes',
         }
         const { sent, failed } = await pushToAssignedUsers(
-          assignedIds,
+          meetingPushTargets,
           {
             title: `Meeting ${labelMap[reminderType]}`,
             body: `"${meeting.title}" — ${meeting.date} ${meeting.startTime} WAT${
@@ -288,14 +309,20 @@ export async function GET(req: Request) {
         results.pushSent += sent
         results.pushFailed += failed
 
-        await ReminderLog.create({
-          entityId: meeting._id,
-          entityType: 'meeting',
-          reminderType,
-          userId: meeting.createdBy,
-        })
-
-        results.meetingReminders++
+        const anySuccess = emailSuccessCount > 0 || sent > 0
+        if (anySuccess || recipients.length === 0) {
+          await ReminderLog.create({
+            entityId: meeting._id,
+            entityType: 'meeting',
+            reminderType,
+            userId: meeting.createdBy,
+          })
+          results.meetingReminders++
+        } else {
+          results.errors.push(
+            `Meeting ${meeting._id} (${reminderType}): all notifications failed — will retry next run while still in window`,
+          )
+        }
       } catch (err) {
         results.errors.push(`Meeting ${meeting._id}: ${(err as Error).message}`)
       }
@@ -333,9 +360,11 @@ export async function GET(req: Request) {
           }
         }
 
+        let emailSuccessCount = 0
         for (const { email, name } of recipients) {
           try {
             await sendTaskReminderEmail(email, name, task)
+            emailSuccessCount++
           } catch (emailErr) {
             results.errors.push(
               `Task ${task._id} email to ${email}: ${(emailErr as Error).message}`,
@@ -362,14 +391,20 @@ export async function GET(req: Request) {
         results.pushSent += sent
         results.pushFailed += failed
 
-        await ReminderLog.create({
-          entityId: task._id,
-          entityType: 'task',
-          reminderType: '1day',
-          userId: task.createdBy,
-        })
-
-        results.taskReminders++
+        const anySuccess = emailSuccessCount > 0 || sent > 0
+        if (anySuccess || recipients.length === 0) {
+          await ReminderLog.create({
+            entityId: task._id,
+            entityType: 'task',
+            reminderType: '1day',
+            userId: task.createdBy,
+          })
+          results.taskReminders++
+        } else {
+          results.errors.push(
+            `Task ${task._id}: all notifications failed — will retry next run while still in window`,
+          )
+        }
       } catch (err) {
         results.errors.push(`Task ${task._id}: ${(err as Error).message}`)
       }
@@ -397,9 +432,23 @@ export async function GET(req: Request) {
           program.participants ?? [],
         )
 
+        // Creator (often an admin) is not necessarily in assignedTo — see the
+        // matching fix in the meeting block above for why this is needed.
+        const programCreator = await User.findById(program.createdBy)
+          .select('email name')
+          .lean()
+        if (programCreator) {
+          const creatorEmail = programCreator.email.toLowerCase()
+          if (!recipients.find((r) => r.email === creatorEmail)) {
+            recipients.push({ email: creatorEmail, name: programCreator.name })
+          }
+        }
+
+        let emailSuccessCount = 0
         for (const { email, name } of recipients) {
           try {
             await sendProgramReminderEmail(email, name, program)
+            emailSuccessCount++
           } catch (emailErr) {
             results.errors.push(
               `Program ${program._id} email to ${email}: ${(emailErr as Error).message}`,
@@ -407,8 +456,11 @@ export async function GET(req: Request) {
           }
         }
 
+        const programPushTargets = Array.from(
+          new Set([...assignedIds, program.createdBy.toString()]),
+        )
         const { sent, failed } = await pushToAssignedUsers(
-          assignedIds,
+          programPushTargets,
           {
             title: 'Program starting soon',
             body: `"${program.title}" starts ${program.startDate}`,
@@ -422,14 +474,20 @@ export async function GET(req: Request) {
         results.pushSent += sent
         results.pushFailed += failed
 
-        await ReminderLog.create({
-          entityId: program._id,
-          entityType: 'program',
-          reminderType: '1day',
-          userId: program.createdBy,
-        })
-
-        results.programReminders++
+        const anySuccess = emailSuccessCount > 0 || sent > 0
+        if (anySuccess || recipients.length === 0) {
+          await ReminderLog.create({
+            entityId: program._id,
+            entityType: 'program',
+            reminderType: '1day',
+            userId: program.createdBy,
+          })
+          results.programReminders++
+        } else {
+          results.errors.push(
+            `Program ${program._id}: all notifications failed — will retry next run while still in window`,
+          )
+        }
       } catch (err) {
         results.errors.push(`Program ${program._id}: ${(err as Error).message}`)
       }
