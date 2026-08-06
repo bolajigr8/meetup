@@ -1,13 +1,13 @@
 // src/app/api/v1/users/route.ts
 import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
 import { ApiError, withErrorHandler } from '@/lib/api-error'
 import User from '@/models/User'
+import { getHybridSession } from '@/lib/hybrid-auth'
 
 // GET /api/v1/users — admin only, returns id+name+email for dropdowns
-export const GET = withErrorHandler(async () => {
-  const session = await auth()
+export const GET = withErrorHandler(async (req) => {
+  const session = await getHybridSession(req)
   if (!session?.user?.id)
     throw new ApiError(401, 'UNAUTHORIZED', 'You must be signed in')
   if (!session.user.isAdmin && !session.user.isSuperAdmin)
