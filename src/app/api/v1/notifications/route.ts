@@ -1,14 +1,13 @@
 // route: GET /api/v1/notifications  |  PATCH /api/v1/notifications (mark all read)
-
 import { NextResponse } from 'next/server'
 import { Types } from 'mongoose'
-import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
 import { ApiError, withErrorHandler } from '@/lib/api-error'
 import Notification from '@/models/Notification'
 import Meeting from '@/models/Meeting'
 import Task from '@/models/Task'
 import Program from '@/models/Program'
+import { getHybridSession } from '@/lib/hybrid-auth'
 
 async function generateNotifications(userId: string, isAdmin: boolean) {
   const uid = new Types.ObjectId(userId)
@@ -32,8 +31,6 @@ async function generateNotifications(userId: string, isAdmin: boolean) {
   const in2DaysStr = fmt(in2Days)
   const in3DaysStr = fmt(in3Days)
 
-  // Admins see notifications for items they created
-  // Regular users see notifications for items assigned to them
   const ownerFilter = isAdmin ? { createdBy: uid } : { assignedTo: uid }
 
   const overdueTasks = await Task.find({
@@ -79,18 +76,20 @@ async function generateNotifications(userId: string, isAdmin: boolean) {
 
   const toUpsert: NotifDoc[] = []
 
-  for (const task of overdueTasks) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const task of overdueTasks as any[]) {
     toUpsert.push({
       userId: uid,
       type: 'task_overdue',
       title: 'Task overdue',
-      message: `"${task.title}" was due on ${(task as any).dueDate} and is still incomplete.`,
+      message: `"${task.title}" was due on ${task.dueDate} and is still incomplete.`,
       entityId: task._id as Types.ObjectId,
       entityType: 'task',
     })
   }
 
-  for (const task of dueSoonTasks) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const task of dueSoonTasks as any[]) {
     toUpsert.push({
       userId: uid,
       type: 'task_due_soon',
@@ -101,25 +100,26 @@ async function generateNotifications(userId: string, isAdmin: boolean) {
     })
   }
 
-  for (const meeting of upcomingMeetings) {
-    const dayLabel =
-      (meeting as any).date === tomorrowStr ? 'tomorrow' : 'in 2 days'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const meeting of upcomingMeetings as any[]) {
+    const dayLabel = meeting.date === tomorrowStr ? 'tomorrow' : 'in 2 days'
     toUpsert.push({
       userId: uid,
       type: 'meeting_reminder',
       title: 'Meeting reminder',
-      message: `"${meeting.title}" is scheduled ${dayLabel}${(meeting as any).startTime ? ' at ' + (meeting as any).startTime : ''}.`,
+      message: `"${meeting.title}" is scheduled ${dayLabel}${meeting.startTime ? ' at ' + meeting.startTime : ''}.`,
       entityId: meeting._id as Types.ObjectId,
       entityType: 'meeting',
     })
   }
 
-  for (const program of startingPrograms) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const program of startingPrograms as any[]) {
     toUpsert.push({
       userId: uid,
       type: 'program_start',
       title: 'Program starting soon',
-      message: `"${program.title}" starts on ${(program as any).startDate}. Participants should be ready.`,
+      message: `"${program.title}" starts on ${program.startDate}. Participants should be ready.`,
       entityId: program._id as Types.ObjectId,
       entityType: 'program',
     })
@@ -137,7 +137,7 @@ async function generateNotifications(userId: string, isAdmin: boolean) {
 }
 
 export const GET = withErrorHandler(async (req) => {
-  const session = await auth()
+  const session = await getHybridSession(req)
   if (!session?.user?.id)
     throw new ApiError(401, 'UNAUTHORIZED', 'You must be signed in')
 
@@ -184,8 +184,8 @@ export const GET = withErrorHandler(async (req) => {
   })
 })
 
-export const PATCH = withErrorHandler(async () => {
-  const session = await auth()
+export const PATCH = withErrorHandler(async (req) => {
+  const session = await getHybridSession(req)
   if (!session?.user?.id)
     throw new ApiError(401, 'UNAUTHORIZED', 'You must be signed in')
 

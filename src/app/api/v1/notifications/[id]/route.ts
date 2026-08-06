@@ -1,13 +1,12 @@
 // route: PATCH /api/v1/notifications/[id] (mark single as read)
-
 import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
 import { ApiError, withErrorHandler } from '@/lib/api-error'
 import Notification from '@/models/Notification'
+import { getHybridSession } from '@/lib/hybrid-auth'
 
-export const PATCH = withErrorHandler(async (_req, ctx) => {
-  const session = await auth()
+export const PATCH = withErrorHandler(async (req, ctx) => {
+  const session = await getHybridSession(req)
   if (!session?.user?.id)
     throw new ApiError(401, 'UNAUTHORIZED', 'You must be signed in')
 

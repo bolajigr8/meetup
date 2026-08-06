@@ -1,14 +1,13 @@
 // src/app/api/v1/settings/route.ts
 import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/db'
 import { ApiError, withErrorHandler } from '@/lib/api-error'
 import { z } from 'zod'
 import User from '@/models/User'
 import UserSettings from '@/models/UserSettings'
+import { getHybridSession } from '@/lib/hybrid-auth'
 
 const updateProfileSchema = z.object({
-  // Email deliberately excluded — cannot be changed via this endpoint
   name: z
     .string()
     .min(2, 'Name must be at least 2 characters')
@@ -27,8 +26,8 @@ const updateProfileSchema = z.object({
     .optional(),
 })
 
-export const GET = withErrorHandler(async () => {
-  const session = await auth()
+export const GET = withErrorHandler(async (req) => {
+  const session = await getHybridSession(req)
   if (!session?.user?.id)
     throw new ApiError(401, 'UNAUTHORIZED', 'You must be signed in')
 
@@ -66,7 +65,7 @@ export const GET = withErrorHandler(async () => {
 })
 
 export const PATCH = withErrorHandler(async (req) => {
-  const session = await auth()
+  const session = await getHybridSession(req)
   if (!session?.user?.id)
     throw new ApiError(401, 'UNAUTHORIZED', 'You must be signed in')
 
@@ -91,7 +90,6 @@ export const PATCH = withErrorHandler(async (req) => {
   const { notificationPrefs, ...profileFields } = parsed.data
   const updates: Promise<unknown>[] = []
 
-  // Only update name — email is intentionally excluded from schema
   if (profileFields.name) {
     updates.push(
       User.findByIdAndUpdate(
