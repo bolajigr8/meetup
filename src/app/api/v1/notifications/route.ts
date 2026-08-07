@@ -49,10 +49,13 @@ async function generateNotifications(userId: string, isAdmin: boolean) {
     .select('_id title dueDate')
     .lean()
 
+  // FEATURE ADD: now includes today's meetings (status upcoming OR
+  // ongoing), not just tomorrow/2-days-out. A meeting happening today is
+  // at least as notification-worthy as one happening in 2 days.
   const upcomingMeetings = await Meeting.find({
     ...ownerFilter,
-    status: 'upcoming',
-    date: { $in: [tomorrowStr, in2DaysStr] },
+    status: { $in: ['upcoming', 'ongoing'] },
+    date: { $in: [todayStr, tomorrowStr, in2DaysStr] },
   })
     .select('_id title date startTime')
     .lean()
@@ -102,7 +105,12 @@ async function generateNotifications(userId: string, isAdmin: boolean) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const meeting of upcomingMeetings as any[]) {
-    const dayLabel = meeting.date === tomorrowStr ? 'tomorrow' : 'in 2 days'
+    const dayLabel =
+      meeting.date === todayStr
+        ? 'today'
+        : meeting.date === tomorrowStr
+          ? 'tomorrow'
+          : 'in 2 days'
     toUpsert.push({
       userId: uid,
       type: 'meeting_reminder',
